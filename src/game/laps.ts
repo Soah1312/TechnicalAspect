@@ -36,6 +36,10 @@ export class LapManager {
     return this.currentLap;
   }
 
+  public syncLapCount(serverLaps: number): void {
+    this.currentLap = serverLaps;
+  }
+
   public getNextExpectedGate(): number {
     return this.nextExpectedGate;
   }

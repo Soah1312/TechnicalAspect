@@ -88,12 +88,19 @@ export function renderPitScreen(
     if (serverNow() >= config.endAt) {
       cleanup();
       pitManager.markExitedPit();
+      if (raceScene) {
+        raceScene.isRaceActive = false;
+        raceScene.car.stop();
+      }
+      sounds.stopEngine();
       sounds.playRaceEnd();
-      stateMachine.transition('ENDED', {
-        api,
-        config,
-        laps: raceScene?.lapManager.getLapCount() || 0,
-      });
+      window.setTimeout(() => {
+        stateMachine.transition('ENDED', {
+          api,
+          config,
+          laps: raceScene?.lapManager.getLapCount() || 0,
+        });
+      }, 2000);
     }
   }, 250);
 

@@ -1,7 +1,7 @@
 import './style.css';
 import { createGame } from './game/game';
 import { ScreenManager } from './ui/screenManager';
-import { mockApi } from './api/mockApi';
+import { activeApi } from './api';
 import { stateMachine } from './game/stateMachine';
 import { clock, serverNow } from './util/clock';
 import { Storage } from './util/storage';
@@ -20,9 +20,9 @@ async function bootstrap() {
   const game = createGame();
 
   // 2. Initialize UI Screen Manager
-  new ScreenManager(uiContainer, mockApi, game);
+  new ScreenManager(uiContainer, activeApi, game);
 
-  const pitManager = new PitManager(mockApi);
+  const pitManager = new PitManager(activeApi);
 
   // 3. Audio unlock on first user tap/click anywhere
   const unlockAudio = () => {
@@ -58,11 +58,11 @@ async function bootstrap() {
 
   try {
     // 6. Server Clock Synchronization
-    await clock.syncWithServer(mockApi);
-    clock.startPeriodicSync(mockApi, 60000);
+    await clock.syncWithServer(activeApi);
+    clock.startPeriodicSync(activeApi, 60000);
 
     // 7. Fetch Server Config
-    const config = await mockApi.getConfig();
+    const config = await activeApi.getConfig();
 
     // 8. Check Kill Switch
     if (!config.isOpen) {
@@ -88,7 +88,7 @@ async function bootstrap() {
 
     // Check race timing
     if (now >= config.endAt) {
-      stateMachine.forceState('ENDED', { api: mockApi, config });
+      stateMachine.forceState('ENDED', { api: activeApi, config });
     } else if (now < config.startAt) {
       stateMachine.forceState('LOBBY', { config, player: storedPlayer });
     } else {
@@ -97,7 +97,7 @@ async function bootstrap() {
         console.log('[Anti-Abuse] Refreshed during question. Resuming with empty tank in PIT.');
         raceScene?.fuelSystem.drainAll();
         stateMachine.forceState('PIT', {
-          api: mockApi,
+          api: activeApi,
           config,
           raceScene,
           reason: 'dry',
@@ -105,7 +105,7 @@ async function bootstrap() {
       } else {
         // Normal resume into active race
         stateMachine.forceState('RACING', {
-          api: mockApi,
+          api: activeApi,
           config,
           raceScene,
         });

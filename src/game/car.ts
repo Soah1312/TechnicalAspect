@@ -55,6 +55,12 @@ export class Car {
     this.nearestTrackIndex = 0;
   }
 
+  public stop(): void {
+    this.vx = 0;
+    this.vy = 0;
+    this.forwardSpeed = 0;
+  }
+
   /**
    * Update arcade physics over deltaSeconds (dt)
    * @param dt Delta time in seconds

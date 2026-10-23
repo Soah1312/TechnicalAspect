@@ -26,27 +26,30 @@ describe('MockApi Quiz & Security Tests', () => {
     const api = new MockApi(false);
     await api.joinRace('TestDriver');
 
-    const q = await api.requestQuestion();
+    // 1. Request first question and submit wrong answer
+    const q1 = await api.requestQuestion();
+    const orig1 = MOCK_QUESTIONS.find((item) => item.id === q1.questionId)!;
+    const correctText1 = orig1.options[orig1.correctIndex];
+    const wrongIdx = (q1.options.indexOf(correctText1) + 1) % 4;
 
-    // In the mock question bank, find the original question text
-    const original = MOCK_QUESTIONS.find((item) => item.id === q.questionId)!;
-    const correctText = original.options[original.correctIndex];
-
-    // Find which index the correctText got shuffled to in q.options
-    const correctShuffledIndex = q.options.indexOf(correctText);
-
-    // First submit wrong answer on a duplicate request or another question
-    const qWrong = await api.requestQuestion();
-    const wrongOriginal = MOCK_QUESTIONS.find((item) => item.id === qWrong.questionId)!;
-    const wrongCorrectText = wrongOriginal.options[wrongOriginal.correctIndex];
-    const wrongIndex = (qWrong.options.indexOf(wrongCorrectText) + 1) % 4;
-
-    const wrongResult = await api.submitAnswer(qWrong.questionId, wrongIndex);
+    const wrongResult = await api.submitAnswer(q1.questionId, wrongIdx);
     expect(wrongResult.correct).toBe(false);
     expect(wrongResult.fuelGrantedMs).toBe(0);
+    expect(wrongResult.correctTotal).toBe(0);
 
-    // Now submit correct answer on q
-    const correctResult = await api.submitAnswer(q.questionId, correctShuffledIndex);
+    // Clear lockout so we can request the next question
+    api.setConfig({ wrongLockoutMs: 0 });
+    api.clearLockout();
+
+    // 2. Request second question and submit correct answer
+    const q2 = await api.requestQuestion();
+    expect(q2.questionId).not.toBe(q1.questionId);
+
+    const orig2 = MOCK_QUESTIONS.find((item) => item.id === q2.questionId)!;
+    const correctText2 = orig2.options[orig2.correctIndex];
+    const correctShuffledIdx = q2.options.indexOf(correctText2);
+
+    const correctResult = await api.submitAnswer(q2.questionId, correctShuffledIdx);
     expect(correctResult.correct).toBe(true);
     expect(correctResult.fuelGrantedMs).toBeGreaterThan(0);
     expect(correctResult.correctTotal).toBe(1);
@@ -54,13 +57,16 @@ describe('MockApi Quiz & Security Tests', () => {
 
   it('cycles through unseen questions without immediate repetition', async () => {
     const api = new MockApi(false);
+    api.setConfig({ wrongLockoutMs: 0 });
     const seenIds = new Set<string>();
 
-    // Request 60 questions
+    // Request and answer 60 questions
     for (let i = 0; i < 60; i++) {
       const q = await api.requestQuestion();
       expect(seenIds.has(q.questionId)).toBe(false);
       seenIds.add(q.questionId);
+      // Answering question allows the next unseen question to be issued
+      await api.submitAnswer(q.questionId, 0);
     }
     expect(seenIds.size).toBe(60);
 

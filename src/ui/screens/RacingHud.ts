@@ -335,13 +335,36 @@ export function renderRacingHud(
 
     // Check race hard stop
     if (raceRemainingMs <= 0) {
+      if (raceScene) {
+        raceScene.isRaceActive = false;
+        raceScene.car.stop();
+      }
       sounds.stopEngine();
       sounds.playRaceEnd();
-      stateMachine.transition('ENDED', {
-        api,
-        config,
-        laps: raceScene?.lapManager.getLapCount() || 0,
-      });
+
+      if (leaderboardPollTimer !== null) {
+        window.clearTimeout(leaderboardPollTimer);
+        leaderboardPollTimer = null;
+      }
+      if (backgroundPollTimer !== null) {
+        window.clearInterval(backgroundPollTimer);
+        backgroundPollTimer = null;
+      }
+
+      const finishBanner = document.createElement('div');
+      finishBanner.className = 'go-cue-banner';
+      finishBanner.style.borderColor = 'var(--accent-yellow)';
+      finishBanner.style.color = 'var(--accent-yellow)';
+      finishBanner.textContent = '🏁 CHECKERED FLAG — RACE OVER! 🏁';
+      container.appendChild(finishBanner);
+
+      window.setTimeout(() => {
+        stateMachine.transition('ENDED', {
+          api,
+          config,
+          laps: raceScene?.lapManager.getLapCount() || 0,
+        });
+      }, 2000);
       return;
     }
 

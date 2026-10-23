@@ -39,12 +39,19 @@ export class MockApi implements GameApi {
   private seenQuestionIds: Set<string> = new Set();
   // Secret session map: questionId -> correct option index in the shuffled array sent to client
   private pendingQuestionAnswers: Map<string, number> = new Map();
+  private issuedAtMap: Map<string, number> = new Map();
+  private answeredMap: Map<string, AnswerResult> = new Map();
+  private currentIssuedQuestion: Question | null = null;
+  private lockedUntil: number | null = null;
+  private fuelGrantedMsTotal = 30000;
+  private lastLapAt: number | null = null;
+  private joinedAt: number = Date.now();
   private simulateDelay: boolean;
 
   constructor(simulateDelay = true) {
     this.simulateDelay = simulateDelay;
     const now = Date.now();
-    const startDelayMs = 10000; // 10 seconds lobby countdown
+    const startDelayMs = simulateDelay ? 10000 : -10000; // In test mode, start immediately
     const raceDurationMs = DEBUG_CONFIG.endInSeconds
       ? DEBUG_CONFIG.endInSeconds * 1000
       : 3 * 60 * 1000; // 3 minutes default
@@ -98,6 +105,22 @@ export class MockApi implements GameApi {
     return { ...this.config };
   }
 
+  public setConfig(cfg: Partial<GameConfig>): void {
+    this.config = { ...this.config, ...cfg };
+  }
+
+  public addFuel(ms: number): void {
+    this.fuelGrantedMsTotal += ms;
+  }
+
+  public clearLockout(): void {
+    this.lockedUntil = null;
+  }
+
+  public setJoinedAt(timeMs: number): void {
+    this.joinedAt = timeMs;
+  }
+
   public async getServerTime(): Promise<number> {
     await this.delay();
     // Simulate server time with tiny fixed skew (+45ms)
@@ -139,6 +162,26 @@ export class MockApi implements GameApi {
   public async requestQuestion(): Promise<Question> {
     await this.delay();
 
+    const now = Date.now();
+
+    // Check lockout
+    if (this.lockedUntil && this.lockedUntil > now) {
+      throw new Error(`Player is locked out until ${new Date(this.lockedUntil).toISOString()}`);
+    }
+
+    // Check if player has an active unanswered question within questionTimeMs
+    if (this.currentIssuedQuestion) {
+      const issuedAt = this.issuedAtMap.get(this.currentIssuedQuestion.questionId) || 0;
+      if (now - issuedAt < this.config.questionTimeMs) {
+        return this.currentIssuedQuestion;
+      } else {
+        // Timed out: apply lockout
+        this.lockedUntil = now + this.config.wrongLockoutMs;
+        this.currentIssuedQuestion = null;
+        throw new Error('Previous question timed out. Lockout applied.');
+      }
+    }
+
     // Find available questions not yet seen
     let available = MOCK_QUESTIONS.filter((q) => !this.seenQuestionIds.has(q.id));
     if (available.length === 0) {
@@ -169,58 +212,142 @@ export class MockApi implements GameApi {
 
     // Store in internal secret map (never exposed to client)
     this.pendingQuestionAnswers.set(chosen.id, newCorrectIndex);
+    this.issuedAtMap.set(chosen.id, now);
 
-    return {
+    this.currentIssuedQuestion = {
       questionId: chosen.id,
       text: chosen.text,
       options: shuffledOptions,
     };
+
+    return this.currentIssuedQuestion;
   }
 
   /**
    * Submit an answer. Evaluates against internal secret session map.
    */
-  public async submitAnswer(questionId: string, optionIndex: number): Promise<AnswerResult> {
+  public async submitAnswer(
+    questionId: string,
+    optionIndex: number,
+    submitTimeMs = Date.now()
+  ): Promise<AnswerResult> {
     await this.delay();
+
+    // Idempotent return if already answered
+    if (this.answeredMap.has(questionId)) {
+      return this.answeredMap.get(questionId)!;
+    }
+
+    if (submitTimeMs >= this.config.endAt) {
+      throw new Error('Race has ended');
+    }
 
     const expectedIndex = this.pendingQuestionAnswers.get(questionId);
     if (expectedIndex === undefined) {
       throw new Error('Question expired or not found. Please request a new question.');
     }
 
-    // Remove from pending map so the same question cannot be answered twice
+    const issuedAt = this.issuedAtMap.get(questionId) || submitTimeMs;
+    const isTimeout = submitTimeMs - issuedAt > this.config.questionTimeMs + 2000;
+
+    if (isTimeout) {
+      this.pendingQuestionAnswers.delete(questionId);
+      this.currentIssuedQuestion = null;
+      this.lockedUntil = submitTimeMs + this.config.wrongLockoutMs;
+
+      const timeoutResult: AnswerResult = {
+        correct: false,
+        fuelGrantedMs: 0,
+        laps: this.player?.laps ?? 0,
+        correctTotal: this.player?.correct ?? 0,
+      };
+      this.answeredMap.set(questionId, timeoutResult);
+      return timeoutResult;
+    }
+
+    // Remove from pending map
     this.pendingQuestionAnswers.delete(questionId);
+    this.currentIssuedQuestion = null;
 
     const isCorrect = optionIndex === expectedIndex;
 
-    if (isCorrect && this.player) {
-      this.player.correct += 1;
+    if (isCorrect) {
+      if (this.player) {
+        this.player.correct += 1;
+      }
+      this.fuelGrantedMsTotal += this.config.fuelPerCorrectMs;
+    } else {
+      this.lockedUntil = submitTimeMs + this.config.wrongLockoutMs;
     }
 
     const fuelGranted = isCorrect ? this.config.fuelPerCorrectMs : 0;
-
-    return {
+    const result: AnswerResult = {
       correct: isCorrect,
       fuelGrantedMs: fuelGranted,
       laps: this.player?.laps ?? 0,
       correctTotal: this.player?.correct ?? 0,
     };
+
+    this.answeredMap.set(questionId, result);
+    return result;
   }
 
   public async submitLap(lapNumber: number, lapTimeMs: number): Promise<LapResult> {
     await this.delay();
+    const now = Date.now();
 
-    if (lapTimeMs < this.config.minLapMs) {
+    // (e) Race window open check
+    if (now < this.config.startAt || now > this.config.endAt || !this.config.isOpen) {
       return {
         accepted: false,
         laps: this.player?.laps ?? 0,
-        reason: 'Lap time suspiciously fast.',
+        reason: 'Race window is closed.',
+      };
+    }
+
+    // (a) Sequential lap check
+    const currentLaps = this.player?.laps ?? 0;
+    if (lapNumber !== currentLaps + 1) {
+      return {
+        accepted: false,
+        laps: currentLaps,
+        reason: 'Invalid lap sequence.',
+      };
+    }
+
+    // (b) Min lap time check
+    if (lapTimeMs < this.config.minLapMs) {
+      return {
+        accepted: false,
+        laps: currentLaps,
+        reason: 'Lap time below minimum physical threshold.',
+      };
+    }
+
+    // (c) Rapid lap submission check (0.9 * minLapMs)
+    const prevLapTime = this.lastLapAt ?? this.joinedAt;
+    const elapsedSinceLastLap = now - prevLapTime;
+    if (elapsedSinceLastLap < this.config.minLapMs * 0.9) {
+      return {
+        accepted: false,
+        laps: currentLaps,
+        reason: 'Laps submitted too quickly.',
+      };
+    }
+
+    // (d) Laps cannot exceed earned driving time
+    if ((currentLaps + 1) * this.config.minLapMs > this.fuelGrantedMsTotal * 1.05) {
+      return {
+        accepted: false,
+        laps: currentLaps,
+        reason: 'Laps exceed earned fuel.',
       };
     }
 
     if (this.player) {
-      this.player.laps = Math.max(this.player.laps, lapNumber);
+      this.player.laps = lapNumber;
     }
+    this.lastLapAt = now;
 
     return {
       accepted: true,

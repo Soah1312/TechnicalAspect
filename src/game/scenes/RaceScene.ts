@@ -9,6 +9,7 @@ import { Vibration } from '../../util/vibration';
 import { stateMachine, type GameState } from '../stateMachine';
 import { Storage } from '../../util/storage';
 import { PALETTE, DEFAULT_CONFIG } from '../../config/constants';
+import { activeApi } from '../../api';
 
 export class RaceScene extends Phaser.Scene {
   public track!: Track;
@@ -54,12 +55,24 @@ export class RaceScene extends Phaser.Scene {
 
     // 5. Setup Lap Events
     this.lapManager.setListeners({
-      onLapComplete: (ev: LapCompleteEvent) => {
+      onLapComplete: async (ev: LapCompleteEvent) => {
         sounds.playLap();
         Vibration.lap();
         console.log(
           `[Lap] Lap ${ev.lapNumber} complete! Driving time: ${(ev.drivingTimeMs / 1000).toFixed(2)}s, Total time: ${(ev.totalTimeMs / 1000).toFixed(2)}s`
         );
+        try {
+          const res = await activeApi.submitLap(ev.lapNumber, ev.drivingTimeMs);
+          if (res.accepted) {
+            console.log(`[Lap Server] Lap ${res.laps} verified by server!`);
+            this.lapManager.syncLapCount(res.laps);
+          } else {
+            console.warn(`[Lap Server] Lap rejected by server: ${res.reason}`);
+            this.lapManager.syncLapCount(res.laps);
+          }
+        } catch (err) {
+          console.error('[Lap Server] submitLap error:', err);
+        }
       },
     });
 
