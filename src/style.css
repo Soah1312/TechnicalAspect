@@ -655,3 +655,121 @@ p.retro-text {
   height: 80px;
   display: block;
 }
+
+/* Pit slide-in animation */
+.pit-overlay {
+  animation: slideUp 0.22s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Question timer bar */
+.q-timer-bar-frame {
+  width: 100%;
+  height: 8px;
+  background-color: #000;
+  border: 2px solid var(--accent-yellow);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.q-timer-bar-fill {
+  height: 100%;
+  width: 100%;
+  background-color: var(--accent-yellow);
+  transition: width 0.1s linear, background-color 0.2s ease;
+}
+
+.q-timer-bar-fill.critical {
+  background-color: var(--wrong-red);
+}
+
+/* Floating fuel grant text */
+.floating-fuel-text {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  color: var(--correct-green);
+  text-shadow: 2px 2px 0px #000;
+  pointer-events: none;
+  z-index: 50;
+  animation: floatUp 1.2s ease-out forwards;
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, 0px) scale(1.1);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -15px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -35px) scale(0.9);
+  }
+}
+
+/* Resume "GO!" Cue */
+.resume-go-banner {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 44px;
+  color: var(--correct-green);
+  text-shadow: 4px 4px 0px #000;
+  pointer-events: none;
+  z-index: 55;
+  animation: popIn 0.5s ease-out forwards;
+}
+
+/* Leaderboard Slide-up Panel Sheet */
+.leaderboard-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(11, 11, 30, 0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  z-index: 40;
+  pointer-events: auto;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.leaderboard-panel-sheet {
+  background-color: var(--dark-panel);
+  border-top: 3px solid var(--accent-yellow);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.85);
+  padding: 14px 14px 20px;
+  max-height: 82%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: slideUp 0.22s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+.leaderboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--cyan);
+  padding-bottom: 8px;
+}
+

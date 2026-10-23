@@ -128,6 +128,7 @@ export class ScreenManager {
         };
         const raceScene = this.game?.scene.getScene('RaceScene') as RaceScene | undefined;
         this.activeCleanup = renderRacingHud(this.container, {
+          api: this.api,
           config,
           raceScene,
         });
@@ -147,14 +148,12 @@ export class ScreenManager {
           wrongLockoutMs: 3000,
           minLapMs: 36000,
         };
-        const remainingFuelMs = (context.remainingFuelMs as number) ?? 0;
-        const laps = (context.laps as number) ?? 0;
+        const raceScene = this.game?.scene.getScene('RaceScene') as RaceScene | undefined;
         const reason = (context.reason as 'dry' | 'voluntary') ?? 'dry';
         this.activeCleanup = renderPitScreen(this.container, {
           api: this.api,
           config,
-          remainingFuelMs,
-          laps,
+          raceScene,
           reason,
         });
         break;

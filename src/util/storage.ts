@@ -22,6 +22,7 @@ if (typeof window !== 'undefined' && DEBUG_CONFIG.forceReset) {
 export const Storage = {
   getPlayer(): { playerId: string; name: string } | null {
     try {
+      if (typeof localStorage === 'undefined') return null;
       const id = localStorage.getItem(KEYS.PLAYER_ID);
       const name = localStorage.getItem(KEYS.PLAYER_NAME);
       if (id && name) {
@@ -35,15 +36,17 @@ export const Storage = {
 
   setPlayer(playerId: string, name: string): void {
     try {
+      if (typeof localStorage === 'undefined') return;
       localStorage.setItem(KEYS.PLAYER_ID, playerId);
       localStorage.setItem(KEYS.PLAYER_NAME, name);
-    } catch (err) {
-      console.warn('Could not persist player to localStorage:', err);
+    } catch {
+      // Ignore
     }
   },
 
   isTutorialSeen(): boolean {
     try {
+      if (typeof sessionStorage === 'undefined') return false;
       return sessionStorage.getItem(KEYS.TUTORIAL_SEEN) === 'true';
     } catch {
       return false;
@@ -52,9 +55,10 @@ export const Storage = {
 
   setTutorialSeen(): void {
     try {
+      if (typeof sessionStorage === 'undefined') return;
       sessionStorage.setItem(KEYS.TUTORIAL_SEEN, 'true');
-    } catch (err) {
-      console.warn('Could not persist tutorial seen flag:', err);
+    } catch {
+      // Ignore
     }
   },
 

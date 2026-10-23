@@ -3,59 +3,73 @@ import { stateMachine } from '../../game/stateMachine';
 import { sounds } from '../../audio/soundManager';
 import { Vibration } from '../../util/vibration';
 import { serverNow } from '../../util/clock';
+import { PitManager } from '../../game/pit';
+import type { RaceScene } from '../../game/scenes/RaceScene';
 
 interface PitScreenProps {
   api: GameApi;
   config: GameConfig;
-  remainingFuelMs: number;
-  laps: number;
-  reason: 'dry' | 'voluntary';
+  raceScene?: RaceScene;
+  reason?: 'dry' | 'voluntary';
 }
 
 export function renderPitScreen(
   container: HTMLElement,
   props: PitScreenProps
 ): () => void {
-  const { api, config } = props;
-  const remainingFuel = props.remainingFuelMs;
-  const currentLaps = props.laps;
+  const { api, config, raceScene } = props;
+  const pitManager = new PitManager(api);
+
+  // Mark pit entered for anti-refresh abuse protection
+  pitManager.markEnteredPit();
 
   let currentQuestion: Question | null = null;
   let isSubmitting = false;
+  let isLockedOut = false;
   let questionTimer: number | null = null;
   let questionStart = Date.now();
   let raceCheckInterval: number | null = null;
 
   container.innerHTML = `
-    <div class="modal-overlay">
+    <div class="modal-overlay pit-overlay">
       <div class="scanlines"></div>
 
-      <!-- Question Top Bar -->
+      <!-- Question Top Header -->
       <div class="question-header">
         <div>
-          <span class="retro-text highlight">${props.reason === 'dry' ? 'OUT OF FUEL!' : 'PIT STOP REFUEL'}</span>
-          <p class="retro-text" style="font-size:7px; margin-top:2px; opacity:0.8;">CAR STOPPED • RACE CLOCK ACTIVE</p>
+          <span class="retro-text highlight" style="font-size:12px;">
+            ${props.reason === 'voluntary' ? 'PIT STOP REFUEL' : 'OUT OF FUEL!'}
+          </span>
+          <p class="retro-text" style="font-size:7px; margin-top:3px; opacity:0.8;">
+            CAR STOPPED • RACE CLOCK ACTIVE
+          </p>
         </div>
         <div style="text-align:right;">
-          <span class="timer-tag" id="q-timer">--s</span>
+          <span class="timer-tag" id="q-timer" style="font-size:14px; font-weight:bold;">15s</span>
         </div>
       </div>
 
-      <!-- Question Content -->
-      <div class="screen-content" style="justify-content:center; padding:10px 0;">
-        <div class="retro-panel" style="width:100%; border-color:var(--cyan);">
+      <!-- Visual 15s Timer Bar -->
+      <div class="q-timer-bar-frame">
+        <div id="q-timer-bar" class="q-timer-bar-fill"></div>
+      </div>
+
+      <!-- Question Content Panel -->
+      <div class="screen-content" style="justify-content:center; padding: 6px 0;">
+        <div class="retro-panel" style="width:100%; border-color:var(--cyan); padding:10px;">
           <p class="retro-text" id="q-text" style="font-size:10px; line-height:1.6;">
-            FETCHING TECH QUESTION...
+            CONNECTING TO TECH PIT CREW...
           </p>
         </div>
 
-        <div id="q-status-banner" style="min-height:22px; width:100%;"></div>
+        <div id="q-status-banner" style="min-height:24px; width:100%; display:flex; justify-content:center; align-items:center;"></div>
 
-        <!-- Options Container -->
+        <!-- 4 Large Answer Buttons -->
         <div id="q-options" class="options-list"></div>
       </div>
 
-      <div style="text-align:center; padding: 4px;">
+      <!-- Bottom Hint Bar -->
+      <div style="text-align:center; padding: 2px;">
         <p class="retro-text" style="font-size:7px; color:var(--cyan);">
           CORRECT = +${Math.round(config.fuelPerCorrectMs / 1000)}s FUEL • WRONG = ${Math.round(config.wrongLockoutMs / 1000)}s LOCKOUT
         </p>
@@ -66,25 +80,32 @@ export function renderPitScreen(
   const qTextEl = container.querySelector('#q-text') as HTMLParagraphElement | null;
   const qOptionsEl = container.querySelector('#q-options') as HTMLDivElement | null;
   const qTimerEl = container.querySelector('#q-timer') as HTMLSpanElement | null;
+  const qTimerBarEl = container.querySelector('#q-timer-bar') as HTMLDivElement | null;
   const statusBanner = container.querySelector('#q-status-banner') as HTMLDivElement | null;
 
   // Monitor race end time while answering
   raceCheckInterval = window.setInterval(() => {
     if (serverNow() >= config.endAt) {
       cleanup();
+      pitManager.markExitedPit();
       sounds.playRaceEnd();
-      stateMachine.transition('ENDED', { api, config, laps: currentLaps });
+      stateMachine.transition('ENDED', {
+        api,
+        config,
+        laps: raceScene?.lapManager.getLapCount() || 0,
+      });
     }
   }, 250);
 
   const loadQuestion = async () => {
     isSubmitting = false;
+    isLockedOut = false;
     if (statusBanner) statusBanner.innerHTML = '';
     if (qTextEl) qTextEl.textContent = 'FETCHING TECH QUESTION...';
     if (qOptionsEl) qOptionsEl.innerHTML = '';
 
     try {
-      currentQuestion = await api.requestQuestion();
+      currentQuestion = await pitManager.fetchQuestion();
       if (!currentQuestion) return;
 
       if (qTextEl) {
@@ -95,7 +116,7 @@ export function renderPitScreen(
         qOptionsEl.innerHTML = currentQuestion.options
           .map(
             (opt, idx) => `
-          <button class="option-btn" data-index="${idx}">
+          <button class="option-btn" data-index="${idx}" style="font-size:10px; padding:12px 10px;">
             <span class="highlight" style="margin-right:6px;">${['A', 'B', 'C', 'D'][idx]}.</span> ${opt}
           </button>
         `
@@ -105,18 +126,27 @@ export function renderPitScreen(
         const buttons = qOptionsEl.querySelectorAll('.option-btn');
         buttons.forEach((btn) => {
           btn.addEventListener('click', () => {
+            if (isSubmitting || isLockedOut) return;
             const index = parseInt(btn.getAttribute('data-index') || '0', 10);
             handleAnswer(index);
           });
         });
       }
 
-      // Start question timer
+      // Start 15s question countdown
       questionStart = Date.now();
       startQuestionCountdown();
     } catch {
-      if (qTextEl) qTextEl.textContent = 'NETWORK GLITCH. RETRYING QUESTION...';
-      window.setTimeout(loadQuestion, 1500);
+      if (qTextEl) {
+        qTextEl.innerHTML = `
+          <span style="color:var(--wrong-red);">NETWORK GLITCH!</span><br/>
+          <button id="retry-question-btn" class="retro-btn btn-secondary" style="margin-top:8px; width:auto; padding:6px 12px;">
+            RETRY QUESTION
+          </button>
+        `;
+        const retryBtn = container.querySelector('#retry-question-btn');
+        retryBtn?.addEventListener('click', () => loadQuestion());
+      }
     }
   };
 
@@ -128,6 +158,7 @@ export function renderPitScreen(
     questionTimer = window.setInterval(() => {
       const elapsed = Date.now() - questionStart;
       const leftMs = config.questionTimeMs - elapsed;
+      const ratio = Math.max(0, leftMs / config.questionTimeMs);
 
       if (qTimerEl) {
         const sec = Math.max(0, Math.ceil(leftMs / 1000));
@@ -139,95 +170,165 @@ export function renderPitScreen(
         }
       }
 
-      if (leftMs <= 0 && !isSubmitting) {
-        // Question timed out
+      if (qTimerBarEl) {
+        qTimerBarEl.style.width = `${ratio * 100}%`;
+        if (ratio <= 0.25) {
+          qTimerBarEl.classList.add('critical');
+        } else {
+          qTimerBarEl.classList.remove('critical');
+        }
+      }
+
+      if (leftMs <= 0 && !isSubmitting && !isLockedOut) {
         handleTimeout();
       }
     }, 100);
   };
 
   const handleTimeout = () => {
-    if (isSubmitting) return;
-    isSubmitting = true;
+    if (isSubmitting || isLockedOut) return;
+    isLockedOut = true;
     if (questionTimer !== null) window.clearInterval(questionTimer);
 
     sounds.playWrong();
     Vibration.wrong();
 
-    if (statusBanner) {
-      statusBanner.innerHTML = `
-        <div class="lockout-notice">
-          TIME OUT! LOCKOUT ${Math.round(config.wrongLockoutMs / 1000)}s...
-        </div>
-      `;
-    }
-
+    // Disable all options
     const buttons = qOptionsEl?.querySelectorAll('.option-btn');
     buttons?.forEach((b) => ((b as HTMLButtonElement).disabled = true));
 
-    window.setTimeout(() => {
-      loadQuestion();
-    }, config.wrongLockoutMs);
+    let lockoutRemaining = Math.round(config.wrongLockoutMs / 1000);
+
+    const updateLockoutBanner = () => {
+      if (statusBanner) {
+        statusBanner.innerHTML = `
+          <div class="lockout-notice" style="width:100%;">
+            TIME OUT! LOCKOUT: ${lockoutRemaining}s...
+          </div>
+        `;
+      }
+    };
+
+    updateLockoutBanner();
+
+    const lockoutTimer = window.setInterval(() => {
+      lockoutRemaining--;
+      if (lockoutRemaining <= 0) {
+        window.clearInterval(lockoutTimer);
+        loadQuestion();
+      } else {
+        updateLockoutBanner();
+      }
+    }, 1000);
   };
 
   const handleAnswer = async (index: number) => {
-    if (isSubmitting || !currentQuestion) return;
+    if (isSubmitting || isLockedOut || !currentQuestion) return;
     isSubmitting = true;
     if (questionTimer !== null) window.clearInterval(questionTimer);
 
+    // 1. Immediately disable buttons to prevent double submission
     const buttons = qOptionsEl?.querySelectorAll('.option-btn');
     const selectedBtn = buttons?.[index] as HTMLButtonElement | undefined;
     buttons?.forEach((b) => ((b as HTMLButtonElement).disabled = true));
 
+    if (selectedBtn) {
+      selectedBtn.innerHTML += ` <span style="font-size:8px; color:var(--accent-yellow);">[CHECKING...]</span>`;
+    }
+
     try {
-      const result = await api.submitAnswer(currentQuestion.questionId, index);
+      const result = await pitManager.answerQuestion(currentQuestion.questionId, index);
 
       if (result.correct) {
-        if (selectedBtn) selectedBtn.classList.add('selected-correct');
+        if (selectedBtn) selectedBtn.className = 'option-btn selected-correct';
         sounds.playCorrect();
         Vibration.correct();
 
-        const addedFuel = result.fuelGrantedMs || config.fuelPerCorrectMs;
-        const newFuel = Math.min(config.tankMaxMs, remainingFuel + addedFuel);
+        const fuelToAdd = result.fuelGrantedMs || config.fuelPerCorrectMs;
+        if (raceScene) {
+          raceScene.fuelSystem.addFuel(fuelToAdd);
+        }
+
+        // Mark pit exited cleanly
+        pitManager.markExitedPit();
 
         if (statusBanner) {
           statusBanner.innerHTML = `
-            <div style="background-color:var(--correct-green); color:#000; padding:6px; font-size:9px; border:2px solid #000; text-align:center;">
-              CORRECT! +${Math.round(addedFuel / 1000)}s FUEL
+            <div style="background-color:var(--correct-green); color:#000; padding:6px 12px; font-size:10px; border:2px solid #000; text-align:center; font-weight:bold;">
+              CORRECT! +${Math.round(fuelToAdd / 1000)}s FUEL
             </div>
           `;
         }
+
+        // Show floating "+20s" text and brief "GO!" cue
+        showFloatingFuelCue(Math.round(fuelToAdd / 1000));
 
         window.setTimeout(() => {
           cleanup();
-          stateMachine.transition('RACING', {
-            api,
-            config,
-            initialFuelMs: newFuel,
-            initialLaps: currentLaps,
-          });
-        }, 700);
+          stateMachine.transition('RACING');
+        }, 650);
       } else {
-        if (selectedBtn) selectedBtn.classList.add('selected-wrong');
+        if (selectedBtn) selectedBtn.className = 'option-btn selected-wrong';
         sounds.playWrong();
         Vibration.wrong();
+        isLockedOut = true;
 
-        if (statusBanner) {
-          statusBanner.innerHTML = `
-            <div class="lockout-notice">
-              WRONG ANSWER! LOCKOUT ${Math.round(config.wrongLockoutMs / 1000)}s...
-            </div>
-          `;
-        }
+        let lockoutRemaining = Math.round(config.wrongLockoutMs / 1000);
+        const updateWrongBanner = () => {
+          if (statusBanner) {
+            statusBanner.innerHTML = `
+              <div class="lockout-notice" style="width:100%;">
+                WRONG ANSWER! LOCKOUT: ${lockoutRemaining}s...
+              </div>
+            `;
+          }
+        };
 
-        window.setTimeout(() => {
-          loadQuestion();
-        }, config.wrongLockoutMs);
+        updateWrongBanner();
+
+        const lockoutTimer = window.setInterval(() => {
+          lockoutRemaining--;
+          if (lockoutRemaining <= 0) {
+            window.clearInterval(lockoutTimer);
+            loadQuestion();
+          } else {
+            updateWrongBanner();
+          }
+        }, 1000);
       }
-    } catch (err) {
-      console.warn('Answer submit error:', err);
-      loadQuestion();
+    } catch {
+      isSubmitting = false;
+      if (statusBanner) {
+        statusBanner.innerHTML = `
+          <div style="color:var(--wrong-red); font-size:8px;">
+            CHECK FAILED. RETRYING ANSWER...
+          </div>
+        `;
+      }
+      buttons?.forEach((b) => ((b as HTMLButtonElement).disabled = false));
     }
+  };
+
+  const showFloatingFuelCue = (fuelSeconds: number) => {
+    const appEl = document.getElementById('app');
+    if (!appEl) return;
+
+    // 1. Floating +20s fuel banner
+    const floatEl = document.createElement('div');
+    floatEl.className = 'floating-fuel-text';
+    floatEl.textContent = `+${fuelSeconds}s FUEL!`;
+    appEl.appendChild(floatEl);
+
+    // 2. Short "GO!" resume cue
+    const goEl = document.createElement('div');
+    goEl.className = 'resume-go-banner';
+    goEl.textContent = 'GO!';
+    appEl.appendChild(goEl);
+
+    window.setTimeout(() => {
+      floatEl.remove();
+      goEl.remove();
+    }, 1200);
   };
 
   const cleanup = () => {

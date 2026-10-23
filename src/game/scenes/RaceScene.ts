@@ -19,7 +19,7 @@ export class RaceScene extends Phaser.Scene {
 
   private carSprite: Phaser.GameObjects.Sprite | null = null;
   private trackImage: Phaser.GameObjects.Image | null = null;
-  private isRaceActive = false;
+  public isRaceActive = false;
 
   constructor() {
     super('RaceScene');

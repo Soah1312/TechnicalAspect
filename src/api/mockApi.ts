@@ -10,111 +10,7 @@ import type {
 } from './types';
 import { DEFAULT_CONFIG, DEBUG_CONFIG } from '../config/constants';
 import { Storage } from '../util/storage';
-
-interface QuestionInternal {
-  id: string;
-  text: string;
-  options: string[];
-  correctIndex: number;
-}
-
-const QUESTION_BANK: QuestionInternal[] = [
-  {
-    id: 'q1',
-    text: 'What does CSS stand for?',
-    options: ['Cascading Style Sheets', 'Computer Style Syntax', 'Creative Styling Script', 'Control Sheet Standard'],
-    correctIndex: 0,
-  },
-  {
-    id: 'q2',
-    text: 'Which data structure follows LIFO?',
-    options: ['Queue', 'Stack', 'Tree', 'Graph'],
-    correctIndex: 1,
-  },
-  {
-    id: 'q3',
-    text: 'Time complexity of binary search on sorted array?',
-    options: ['O(n)', 'O(n log n)', 'O(log n)', 'O(1)'],
-    correctIndex: 2,
-  },
-  {
-    id: 'q4',
-    text: 'What port does default HTTP use?',
-    options: ['443', '21', '80', '8080'],
-    correctIndex: 2,
-  },
-  {
-    id: 'q5',
-    text: 'In JavaScript, typeof null returns:',
-    options: ['null', 'undefined', 'object', 'number'],
-    correctIndex: 2,
-  },
-  {
-    id: 'q6',
-    text: 'Which protocol secures web traffic via SSL/TLS?',
-    options: ['HTTPS', 'FTP', 'SMTP', 'SSH'],
-    correctIndex: 0,
-  },
-  {
-    id: 'q7',
-    text: 'What does SQL stand for?',
-    options: ['Structured Query Language', 'Simple Question Link', 'System Query Logic', 'Standard Quantum Loop'],
-    correctIndex: 0,
-  },
-  {
-    id: 'q8',
-    text: 'Git command to stage changes for commit:',
-    options: ['git push', 'git add', 'git commit', 'git stage-all'],
-    correctIndex: 1,
-  },
-  {
-    id: 'q9',
-    text: 'Which layer of OSI model handles routing?',
-    options: ['Data Link', 'Transport', 'Network', 'Session'],
-    correctIndex: 2,
-  },
-  {
-    id: 'q10',
-    text: 'What is the base of Hexadecimal system?',
-    options: ['8', '10', '16', '32'],
-    correctIndex: 2,
-  },
-  {
-    id: 'q11',
-    text: 'Which HTML tag links external CSS?',
-    options: ['<script>', '<style>', '<link>', '<css>'],
-    correctIndex: 2,
-  },
-  {
-    id: 'q12',
-    text: 'What does API stand for?',
-    options: [
-      'Application Programming Interface',
-      'Advanced Program Instruction',
-      'Automated Protocol Interaction',
-      'App Process Integration',
-    ],
-    correctIndex: 0,
-  },
-  {
-    id: 'q13',
-    text: 'Which HTTP method is idempotent?',
-    options: ['POST', 'GET', 'PATCH', 'CONNECT'],
-    correctIndex: 1,
-  },
-  {
-    id: 'q14',
-    text: 'In Python, which keyword defines a function?',
-    options: ['func', 'fn', 'def', 'function'],
-    correctIndex: 2,
-  },
-  {
-    id: 'q15',
-    text: 'Which algorithm is used in public key cryptography?',
-    options: ['RSA', 'AES', 'SHA-256', 'MD5'],
-    correctIndex: 0,
-  },
-];
+import { MOCK_QUESTIONS } from './mockQuestions';
 
 const BOT_NAMES = [
   'TurboTuring', 'PixelRacer', 'BitDrifter', 'ByteRider', 'CyberApex',
@@ -138,9 +34,15 @@ export class MockApi implements GameApi {
   private player: PlayerState | null = null;
   private bots: BotRecord[] = [];
   private creationTime: number = Date.now();
-  private lastQuestionIndex = 0;
 
-  constructor() {
+  // Seen questions set for this player session
+  private seenQuestionIds: Set<string> = new Set();
+  // Secret session map: questionId -> correct option index in the shuffled array sent to client
+  private pendingQuestionAnswers: Map<string, number> = new Map();
+  private simulateDelay: boolean;
+
+  constructor(simulateDelay = true) {
+    this.simulateDelay = simulateDelay;
     const now = Date.now();
     const startDelayMs = 10000; // 10 seconds lobby countdown
     const raceDurationMs = DEBUG_CONFIG.endInSeconds
@@ -160,7 +62,7 @@ export class MockApi implements GameApi {
       minLapMs: DEFAULT_CONFIG.minLapMs,
     };
 
-    // Initialize bot fleet
+    // Initialize 30 active bots
     this.initBots();
 
     // Check if player already stored in local storage
@@ -180,13 +82,14 @@ export class MockApi implements GameApi {
       id: `bot_${i}`,
       name,
       laps: Math.floor(Math.random() * 2),
-      correct: Math.floor(Math.random() * 3),
+      correct: Math.floor(Math.random() * 2),
       lastLapTime: this.creationTime - Math.random() * 30000,
     }));
   }
 
   private async delay(): Promise<void> {
-    const ms = Math.floor(Math.random() * 300) + 100; // 100 - 400 ms
+    if (!this.simulateDelay) return;
+    const ms = Math.floor(Math.random() * 300) + 100; // 100 - 400 ms simulated network latency
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
@@ -197,8 +100,8 @@ export class MockApi implements GameApi {
 
   public async getServerTime(): Promise<number> {
     await this.delay();
-    // In mock, server time is simulated real time with a tiny fixed skew
-    return Date.now() + 50;
+    // Simulate server time with tiny fixed skew (+45ms)
+    return Date.now() + 45;
   }
 
   public async joinRace(name: string): Promise<PlayerState> {
@@ -229,28 +132,68 @@ export class MockApi implements GameApi {
     return { ...this.player };
   }
 
+  /**
+   * Request a question the player has not seen yet.
+   * Shuffles options and keeps the correct index secret in the mock only.
+   */
   public async requestQuestion(): Promise<Question> {
     await this.delay();
-    // Cycle or pick random question
-    const q = QUESTION_BANK[this.lastQuestionIndex % QUESTION_BANK.length];
-    this.lastQuestionIndex++;
+
+    // Find available questions not yet seen
+    let available = MOCK_QUESTIONS.filter((q) => !this.seenQuestionIds.has(q.id));
+    if (available.length === 0) {
+      // All 60 questions used! Reset seen set to recycle
+      this.seenQuestionIds.clear();
+      available = [...MOCK_QUESTIONS];
+    }
+
+    // Pick random question from available pool
+    const randomIndex = Math.floor(Math.random() * available.length);
+    const chosen = available[randomIndex];
+    this.seenQuestionIds.add(chosen.id);
+
+    // Identify the correct answer text before shuffling
+    const correctText = chosen.options[chosen.correctIndex];
+
+    // Shuffle options using Fisher-Yates
+    const shuffledOptions = [...chosen.options];
+    for (let i = shuffledOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = shuffledOptions[i];
+      shuffledOptions[i] = shuffledOptions[j];
+      shuffledOptions[j] = temp;
+    }
+
+    // Map where the correct option landed
+    const newCorrectIndex = shuffledOptions.indexOf(correctText);
+
+    // Store in internal secret map (never exposed to client)
+    this.pendingQuestionAnswers.set(chosen.id, newCorrectIndex);
 
     return {
-      questionId: q.id,
-      text: q.text,
-      options: [...q.options],
+      questionId: chosen.id,
+      text: chosen.text,
+      options: shuffledOptions,
     };
   }
 
+  /**
+   * Submit an answer. Evaluates against internal secret session map.
+   */
   public async submitAnswer(questionId: string, optionIndex: number): Promise<AnswerResult> {
     await this.delay();
-    const q = QUESTION_BANK.find((item) => item.id === questionId);
-    if (!q) {
-      throw new Error('Question expired or not found.');
+
+    const expectedIndex = this.pendingQuestionAnswers.get(questionId);
+    if (expectedIndex === undefined) {
+      throw new Error('Question expired or not found. Please request a new question.');
     }
 
-    const isCorrect = q.correctIndex === optionIndex;
-    if (this.player && isCorrect) {
+    // Remove from pending map so the same question cannot be answered twice
+    this.pendingQuestionAnswers.delete(questionId);
+
+    const isCorrect = optionIndex === expectedIndex;
+
+    if (isCorrect && this.player) {
       this.player.correct += 1;
     }
 
@@ -288,14 +231,14 @@ export class MockApi implements GameApi {
   public async getLeaderboard(): Promise<LeaderboardSnapshot> {
     await this.delay();
 
-    // Gradually advance bots to simulate an active flashmob
+    // Gradually advance bots to simulate live flashmob competition
     const now = Date.now();
     if (now >= this.config.startAt && now <= this.config.endAt) {
       for (const bot of this.bots) {
-        if (Math.random() < 0.25) {
+        if (Math.random() < 0.22) {
           bot.laps += 1;
           bot.lastLapTime = now;
-          if (Math.random() < 0.7) {
+          if (Math.random() < 0.65) {
             bot.correct += 1;
           }
         }
@@ -324,7 +267,7 @@ export class MockApi implements GameApi {
       });
     }
 
-    // Sort: laps desc, correct desc, lastLapTime asc
+    // Sort: laps desc, then correct desc, then lastLapTime asc
     allRows.sort((a, b) => {
       if (b.laps !== a.laps) return b.laps - a.laps;
       if (b.correct !== a.correct) return b.correct - a.correct;

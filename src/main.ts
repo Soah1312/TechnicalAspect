@@ -6,6 +6,8 @@ import { stateMachine } from './game/stateMachine';
 import { clock, serverNow } from './util/clock';
 import { Storage } from './util/storage';
 import { sounds } from './audio/soundManager';
+import { PitManager } from './game/pit';
+import type { RaceScene } from './game/scenes/RaceScene';
 
 async function bootstrap() {
   const uiContainer = document.getElementById('ui-container');
@@ -20,6 +22,8 @@ async function bootstrap() {
   // 2. Initialize UI Screen Manager
   new ScreenManager(uiContainer, mockApi, game);
 
+  const pitManager = new PitManager(mockApi);
+
   // 3. Audio unlock on first user tap/click anywhere
   const unlockAudio = () => {
     sounds.unlock();
@@ -29,24 +33,44 @@ async function bootstrap() {
   window.addEventListener('pointerdown', unlockAudio, { passive: true });
   window.addEventListener('keydown', unlockAudio, { passive: true });
 
-  // 4. Initial Loading State
+  // 4. Handle Tab Visibility / Phone Lock Edge Cases
+  document.addEventListener('visibilitychange', () => {
+    const isHidden = document.hidden;
+    const raceScene = game.scene.getScene('RaceScene') as RaceScene | undefined;
+
+    if (isHidden) {
+      if (raceScene) {
+        raceScene.isRaceActive = false;
+      }
+      sounds.stopEngine();
+    } else {
+      if (stateMachine.getState() === 'RACING') {
+        if (raceScene) {
+          raceScene.isRaceActive = true;
+        }
+        sounds.startEngine();
+      }
+    }
+  });
+
+  // 5. Initial Loading State
   stateMachine.forceState('LOADING', { message: 'INITIALIZING TELEMETRY...' });
 
   try {
-    // 5. Server Clock Synchronization
+    // 6. Server Clock Synchronization
     await clock.syncWithServer(mockApi);
     clock.startPeriodicSync(mockApi, 60000);
 
-    // 6. Fetch Server Config
+    // 7. Fetch Server Config
     const config = await mockApi.getConfig();
 
-    // 7. Check Kill Switch
+    // 8. Check Kill Switch
     if (!config.isOpen) {
       stateMachine.forceState('CLOSED');
       return;
     }
 
-    // 8. Check Existing Player Session for Sensible Resume
+    // 9. Check Existing Player Session for Sensible Resume
     const storedPlayer = Storage.getPlayer();
 
     if (!storedPlayer) {
@@ -55,7 +79,7 @@ async function bootstrap() {
     }
 
     // Player found: update car visual in scene if loaded
-    const raceScene = game.scene.getScene('RaceScene') as unknown as { updateCarTexture?: (id: string) => void };
+    const raceScene = game.scene.getScene('RaceScene') as RaceScene | undefined;
     if (raceScene?.updateCarTexture) {
       raceScene.updateCarTexture(storedPlayer.playerId);
     }
@@ -68,13 +92,24 @@ async function bootstrap() {
     } else if (now < config.startAt) {
       stateMachine.forceState('LOBBY', { config, player: storedPlayer });
     } else {
-      // Race currently in progress!
-      stateMachine.forceState('RACING', {
-        api: mockApi,
-        config,
-        initialFuelMs: config.initialFuelMs,
-        initialLaps: 0,
-      });
+      // Check Anti-Refresh Abuse: did player refresh mid-question?
+      if (pitManager.isMarkedInPit()) {
+        console.log('[Anti-Abuse] Refreshed during question. Resuming with empty tank in PIT.');
+        raceScene?.fuelSystem.drainAll();
+        stateMachine.forceState('PIT', {
+          api: mockApi,
+          config,
+          raceScene,
+          reason: 'dry',
+        });
+      } else {
+        // Normal resume into active race
+        stateMachine.forceState('RACING', {
+          api: mockApi,
+          config,
+          raceScene,
+        });
+      }
     }
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'FAILED TO INITIALIZE TELEMETRY';
