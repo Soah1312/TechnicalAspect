@@ -22,7 +22,7 @@ INSERT INTO public.questions (text, options, correct_index, active) VALUES
 const rows = seedData.map((q) => {
   const textEscaped = q.text.replace(/'/g, "''");
   const optionsJson = JSON.stringify(q.options).replace(/'/g, "''");
-  const correctIdx = Number(q.correctIndex);
+  const correctIdx = Number(q.correct_index !== undefined ? q.correct_index : q.correctIndex);
   return `  ('${textEscaped}', '${optionsJson}'::jsonb, ${correctIdx}, true)`;
 });
 
