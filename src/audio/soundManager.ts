@@ -189,6 +189,10 @@ class SoundManager {
     }
   }
 
+  private grassOsc: OscillatorNode | null = null;
+  private grassGain: GainNode | null = null;
+  private lastLowFuelBeep = 0;
+
   public startEngine(): void {
     if (this.engineOsc || !this.ctx || this.muted) return;
     try {
@@ -196,9 +200,9 @@ class SoundManager {
       this.engineGain = this.ctx.createGain();
 
       this.engineOsc.type = 'triangle';
-      this.engineOsc.frequency.setValueAtTime(70, this.ctx.currentTime);
+      this.engineOsc.frequency.setValueAtTime(65, this.ctx.currentTime);
 
-      this.engineGain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+      this.engineGain.gain.setValueAtTime(0.06, this.ctx.currentTime);
 
       this.engineOsc.connect(this.engineGain);
       this.engineGain.connect(this.ctx.destination);
@@ -213,7 +217,7 @@ class SoundManager {
     if (!this.engineOsc || !this.ctx || this.muted) return;
     try {
       const minFreq = 65;
-      const maxFreq = 180;
+      const maxFreq = 210;
       const targetFreq = minFreq + (maxFreq - minFreq) * Math.max(0, Math.min(1, speedRatio));
       this.engineOsc.frequency.setValueAtTime(targetFreq, this.ctx.currentTime);
     } catch {
@@ -232,6 +236,59 @@ class SoundManager {
     }
     this.engineOsc = null;
     this.engineGain = null;
+    this.stopGrassRumble();
+  }
+
+  public updateGrassRumble(isOffroad: boolean): void {
+    if (this.muted || !this.ctx) {
+      this.stopGrassRumble();
+      return;
+    }
+
+    if (isOffroad) {
+      if (!this.grassOsc) {
+        try {
+          this.grassOsc = this.ctx.createOscillator();
+          this.grassGain = this.ctx.createGain();
+
+          this.grassOsc.type = 'sawtooth';
+          this.grassOsc.frequency.setValueAtTime(45, this.ctx.currentTime);
+
+          this.grassGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+
+          this.grassOsc.connect(this.grassGain);
+          this.grassGain.connect(this.ctx.destination);
+
+          this.grassOsc.start();
+        } catch {
+          // Ignore
+        }
+      }
+    } else {
+      this.stopGrassRumble();
+    }
+  }
+
+  public stopGrassRumble(): void {
+    if (!this.grassOsc) return;
+    try {
+      this.grassOsc.stop();
+      this.grassOsc.disconnect();
+      this.grassGain?.disconnect();
+    } catch {
+      // Ignore
+    }
+    this.grassOsc = null;
+    this.grassGain = null;
+  }
+
+  public playLowFuelBeep(): void {
+    const now = Date.now();
+    // Throttle beep to at most once every 1.5 seconds
+    if (now - this.lastLowFuelBeep < 1500) return;
+    this.lastLowFuelBeep = now;
+
+    this.playTone(740, 'square', 0.1, 0.18);
   }
 }
 

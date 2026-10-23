@@ -1,51 +1,74 @@
-import type { GameApi, GameConfig } from '../../api/types';
+import type { GameConfig } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { serverNow } from '../../util/clock';
 import { sounds } from '../../audio/soundManager';
-import { Vibration } from '../../util/vibration';
+import { DEBUG_CONFIG } from '../../config/constants';
+import type { RaceScene } from '../../game/scenes/RaceScene';
+import { Car } from '../../game/car';
 
 interface RacingHudProps {
-  api: GameApi;
   config: GameConfig;
-  initialFuelMs?: number;
-  initialLaps?: number;
+  raceScene?: RaceScene;
 }
 
 export function renderRacingHud(
   container: HTMLElement,
   props: RacingHudProps
 ): () => void {
-  const { api, config } = props;
-  let currentFuelMs = props.initialFuelMs ?? config.initialFuelMs;
-  let currentLaps = props.initialLaps ?? 0;
+  const { config, raceScene } = props;
   let animFrameId: number | null = null;
-  let lastTimestamp = performance.now();
+  let blinkCounter = 0;
 
-  sounds.startEngine();
+  // Track calibration metrics
+  const trackLength = raceScene?.track.totalLength || 11200;
+  const theoreticalBestLapMs = Math.round((trackLength / Car.MAX_SPEED) * 1000);
+  const recommendedMinLapMs = Math.round(theoreticalBestLapMs * 0.8);
+
+  if (DEBUG_CONFIG.isDebug) {
+    console.log(
+      `[Calibration Helper] Track Length: ${Math.round(trackLength)}px | Max Speed: ${Car.MAX_SPEED}px/s`
+    );
+    console.log(
+      `[Calibration Helper] Theoretical Best Lap: ${(theoreticalBestLapMs / 1000).toFixed(1)}s`
+    );
+    console.log(
+      `[Calibration Helper] RECOMMENDED minLapMs (80%): ${recommendedMinLapMs} ms`
+    );
+  }
 
   container.innerHTML = `
     <div class="screen-layer transparent-bg" style="pointer-events:none;">
       <div class="scanlines"></div>
 
-      <!-- Retro Top HUD Bar -->
+      <!-- Retro Top Arcade HUD -->
       <div class="hud-topbar">
-        <div class="hud-group">
-          <span class="hud-label">LAP</span>
-          <span id="hud-laps" class="hud-value">${currentLaps}</span>
+        <div class="hud-group" style="min-width: 44px;">
+          <span class="hud-label">LAPS</span>
+          <span id="hud-laps" class="hud-value">0</span>
         </div>
 
-        <div class="hud-group fuel-container">
+        <div class="hud-group" style="min-width: 44px;">
+          <span class="hud-label">CORRECT</span>
+          <span class="hud-value green-text">0</span>
+        </div>
+
+        <div class="hud-group fuel-container" style="flex: 1; max-width: 110px;">
           <div style="display:flex; justify-content:space-between; font-size:7px;">
             <span class="hud-label">FUEL</span>
-            <span id="hud-fuel-sec" class="hud-value" style="font-size:7px;">${Math.ceil(currentFuelMs / 1000)}s</span>
+            <span id="hud-fuel-sec" class="hud-value" style="font-size:7px;">30s</span>
           </div>
           <div class="fuel-gauge-frame">
             <div id="hud-fuel-fill" class="fuel-gauge-fill" style="width: 100%;"></div>
           </div>
         </div>
 
-        <div class="hud-group">
-          <span class="hud-label">RACE TIME</span>
+        <div class="hud-group" style="min-width: 42px;">
+          <span class="hud-label">RANK</span>
+          <span id="hud-rank" class="hud-value cyan-text">#--</span>
+        </div>
+
+        <div class="hud-group" style="min-width: 48px;">
+          <span class="hud-label">TIME</span>
           <span id="hud-race-time" class="hud-value">--:--</span>
         </div>
 
@@ -54,30 +77,39 @@ export function renderRacingHud(
         </button>
       </div>
 
-      <!-- Center Steering Indicator for Touch / Desktop -->
-      <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; pointer-events:none;">
-        <p class="retro-text" style="opacity:0.6; font-size:8px;">
-          [ HOLD LEFT / RIGHT TO STEER ]
-        </p>
+      <!-- Minimap Frame (Top Right) -->
+      <div class="minimap-frame" id="minimap-container">
+        <canvas id="minimap-canvas" width="80" height="80"></canvas>
       </div>
 
-      <!-- Retro Bottom Controls -->
-      <div class="hud-bottombar" style="background-color: rgba(11, 11, 30, 0.85); border-top: 2px solid #ffffff;">
-        <button id="hud-pit-btn" class="pit-btn" disabled>
-          PIT STOP (50%↓)
+      <!-- Pulsing PIT Button (Appears when fuel <= 50%) -->
+      <div style="position: absolute; top: 140px; right: 12px; pointer-events: auto; z-index: 24;">
+        <button id="hud-pit-btn" class="pit-btn" style="display: none;">
+          PIT STOP
         </button>
+      </div>
 
-        <div style="display:flex; gap:6px;">
-          <button id="hud-test-lap-btn" class="retro-btn btn-secondary" style="padding:6px 8px; font-size:7px; width:auto;">
-            +1 LAP
-          </button>
-          <button id="hud-empty-fuel-btn" class="retro-btn btn-secondary" style="padding:6px 8px; font-size:7px; width:auto; color:var(--wrong-red);">
-            DRAIN FUEL
-          </button>
-          <button id="hud-end-race-btn" class="retro-btn btn-secondary" style="padding:6px 8px; font-size:7px; width:auto;">
-            END
-          </button>
+      <!-- Debug Calibration Bar (if ?debug=1) -->
+      ${
+        DEBUG_CONFIG.isDebug
+          ? `
+        <div style="position: absolute; top: 90px; left: 10px; background: rgba(0,0,0,0.8); border: 1px solid #00ff00; padding: 4px 6px; font-size: 7px; color: #00ff00; font-family: monospace; pointer-events: none; z-index: 26;">
+          <div>THEORETICAL BEST: ${(theoreticalBestLapMs / 1000).toFixed(1)}s</div>
+          <div id="debug-last-lap">LAST LAP: --</div>
+          <div>RECOMMENDED minLapMs: ${recommendedMinLapMs}ms</div>
         </div>
+      `
+          : ''
+      }
+
+      <!-- Bottom Multi-Touch Thumb Steering Controls -->
+      <div class="steer-controls-container">
+        <button id="steer-left-btn" class="steer-thumb-btn" aria-label="Steer Left">
+          ◀
+        </button>
+        <button id="steer-right-btn" class="steer-thumb-btn" aria-label="Steer Right">
+          ▶
+        </button>
       </div>
     </div>
   `;
@@ -88,11 +120,24 @@ export function renderRacingHud(
   const lapsEl = container.querySelector('#hud-laps') as HTMLSpanElement | null;
   const pitBtn = container.querySelector('#hud-pit-btn') as HTMLButtonElement | null;
   const muteBtn = container.querySelector('#hud-mute-btn') as HTMLButtonElement | null;
-  const testLapBtn = container.querySelector('#hud-test-lap-btn') as HTMLButtonElement | null;
-  const drainFuelBtn = container.querySelector('#hud-empty-fuel-btn') as HTMLButtonElement | null;
-  const endRaceBtn = container.querySelector('#hud-end-race-btn') as HTMLButtonElement | null;
+  const steerLeftBtn = container.querySelector('#steer-left-btn') as HTMLElement | null;
+  const steerRightBtn = container.querySelector('#steer-right-btn') as HTMLElement | null;
+  const debugLastLapEl = container.querySelector('#debug-last-lap') as HTMLDivElement | null;
 
-  // Sound mute button
+  // Setup Minimap Base
+  const miniCanvas = container.querySelector('#minimap-canvas') as HTMLCanvasElement | null;
+  const miniCtx = miniCanvas?.getContext('2d');
+  let baseMinimapImg: HTMLCanvasElement | null = null;
+  if (raceScene) {
+    baseMinimapImg = raceScene.track.renderMinimap();
+  }
+
+  // Bind Multi-Touch Thumb Steering Buttons
+  if (raceScene && steerLeftBtn && steerRightBtn) {
+    raceScene.inputManager.bindTouchButtons(steerLeftBtn, steerRightBtn);
+  }
+
+  // Mute Toggle Button
   muteBtn?.addEventListener('click', () => {
     sounds.unlock();
     const muted = sounds.toggleMute();
@@ -101,56 +146,25 @@ export function renderRacingHud(
     }
   });
 
-  // Voluntary Pit Stop handler
+  // Pit Button (Stage 2: logs action and provides button feedback)
   pitBtn?.addEventListener('click', () => {
     sounds.unlock();
-    stateMachine.transition('PIT', {
-      api,
-      config,
-      remainingFuelMs: currentFuelMs,
-      laps: currentLaps,
-      reason: 'voluntary',
-    });
+    console.log('[Pit] Voluntary pit clicked (questions will be wired in Stage 3)');
   });
 
-  // Test simulate lap button
-  testLapBtn?.addEventListener('click', async () => {
-    currentLaps++;
-    if (lapsEl) lapsEl.textContent = currentLaps.toString();
-    sounds.playLap();
-    Vibration.lap();
-    try {
-      await api.submitLap(currentLaps, config.minLapMs + 1000);
-    } catch (err) {
-      console.warn('Error submitting lap:', err);
-    }
-  });
-
-  // Drain fuel button
-  drainFuelBtn?.addEventListener('click', () => {
-    currentFuelMs = 0;
-  });
-
-  // Manual End race button for testing
-  endRaceBtn?.addEventListener('click', () => {
-    sounds.stopEngine();
-    sounds.playRaceEnd();
-    stateMachine.transition('ENDED', { api, config, laps: currentLaps });
-  });
-
-  // Main loop: fuel burn and race countdown timer
-  const updateLoop = (nowTime: number) => {
-    const deltaMs = nowTime - lastTimestamp;
-    lastTimestamp = nowTime;
-
-    // Check race hard stop
+  // Main HUD Update Loop
+  const updateLoop = () => {
     const nowServer = serverNow();
     const raceRemainingMs = config.endAt - nowServer;
 
+    // Check race hard stop
     if (raceRemainingMs <= 0) {
       sounds.stopEngine();
       sounds.playRaceEnd();
-      stateMachine.transition('ENDED', { api, config, laps: currentLaps });
+      stateMachine.transition('ENDED', {
+        config,
+        laps: raceScene?.lapManager.getLapCount() || 0,
+      });
       return;
     }
 
@@ -161,37 +175,64 @@ export function renderRacingHud(
       raceTimeEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-    // Drain fuel while car is moving
-    if (currentFuelMs > 0) {
-      currentFuelMs = Math.max(0, currentFuelMs - deltaMs);
-      const ratio = currentFuelMs / config.tankMaxMs;
-      sounds.updateEnginePitch(0.5 + 0.5 * ratio);
+    if (raceScene) {
+      // 1. Update Laps
+      if (lapsEl) {
+        lapsEl.textContent = raceScene.lapManager.getLapCount().toString();
+      }
+
+      // 2. Update Fuel Gauge
+      const fuelRatio = raceScene.fuelSystem.getRatio();
+      const fuelMs = raceScene.fuelSystem.getFuelMs();
 
       if (fuelFillEl) {
-        fuelFillEl.style.width = `${Math.min(100, Math.max(0, ratio * 100))}%`;
-        fuelFillEl.className = 'fuel-gauge-fill' + (ratio <= 0.2 ? ' critical' : ratio <= 0.5 ? ' low' : '');
+        fuelFillEl.style.width = `${Math.min(100, Math.max(0, fuelRatio * 100))}%`;
+        fuelFillEl.className =
+          'fuel-gauge-fill' + (fuelRatio <= 0.25 ? ' critical' : fuelRatio <= 0.5 ? ' low' : '');
       }
 
       if (fuelSecEl) {
-        fuelSecEl.textContent = `${Math.ceil(currentFuelMs / 1000)}s`;
+        fuelSecEl.textContent = `${Math.ceil(fuelMs / 1000)}s`;
       }
 
-      // Check voluntary pit availability (tank <= 50%)
-      const canPit = ratio <= config.pitBelowFraction;
+      // 3. Update Pit Button visibility & pulsing
+      const canPit = raceScene.fuelSystem.isPitAllowed();
       if (pitBtn) {
-        pitBtn.disabled = !canPit;
+        if (canPit) {
+          pitBtn.style.display = 'block';
+          pitBtn.classList.add('pulsing-pit');
+        } else {
+          pitBtn.style.display = 'none';
+          pitBtn.classList.remove('pulsing-pit');
+        }
       }
-    } else {
-      // Tank is completely dry! Rolls to stop and opens question modal
-      sounds.stopEngine();
-      stateMachine.transition('PIT', {
-        api,
-        config,
-        remainingFuelMs: 0,
-        laps: currentLaps,
-        reason: 'dry',
-      });
-      return;
+
+      // 4. Update Minimap Blinking Car Dot
+      if (miniCtx && miniCanvas && baseMinimapImg) {
+        miniCtx.clearRect(0, 0, 80, 80);
+        miniCtx.drawImage(baseMinimapImg, 0, 0);
+
+        // Blinking car marker
+        blinkCounter++;
+        if (blinkCounter % 20 < 14) {
+          const mCoords = raceScene.track.worldToMinimap(raceScene.car.x, raceScene.car.y);
+          miniCtx.fillStyle = '#ff2e4d';
+          miniCtx.beginPath();
+          miniCtx.arc(mCoords.mx, mCoords.my, 3.5, 0, Math.PI * 2);
+          miniCtx.fill();
+
+          miniCtx.fillStyle = '#ffffff';
+          miniCtx.beginPath();
+          miniCtx.arc(mCoords.mx, mCoords.my, 1.5, 0, Math.PI * 2);
+          miniCtx.fill();
+        }
+      }
+
+      // 5. Update Debug Metrics
+      if (DEBUG_CONFIG.isDebug && debugLastLapEl) {
+        const lastLapTime = raceScene.lapManager.getLastLapDrivingTimeMs();
+        debugLastLapEl.textContent = `LAST LAP: ${lastLapTime > 0 ? (lastLapTime / 1000).toFixed(1) + 's' : '--'}`;
+      }
     }
 
     animFrameId = requestAnimationFrame(updateLoop);
@@ -203,6 +244,5 @@ export function renderRacingHud(
     if (animFrameId !== null) {
       cancelAnimationFrame(animFrameId);
     }
-    sounds.stopEngine();
   };
 }

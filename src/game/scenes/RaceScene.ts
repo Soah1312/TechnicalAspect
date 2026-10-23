@@ -1,43 +1,109 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, PALETTE } from '../../config/constants';
-import { stateMachine } from '../stateMachine';
+import { Track, WORLD_WIDTH, WORLD_HEIGHT } from '../track';
+import { Car } from '../car';
+import { FuelSystem } from '../fuel';
+import { LapManager, type LapCompleteEvent } from '../laps';
+import { InputManager } from '../input';
+import { sounds } from '../../audio/soundManager';
+import { Vibration } from '../../util/vibration';
+import { stateMachine, type GameState } from '../stateMachine';
 import { Storage } from '../../util/storage';
+import { PALETTE, DEFAULT_CONFIG } from '../../config/constants';
 
 export class RaceScene extends Phaser.Scene {
-  private playerCar: Phaser.GameObjects.Sprite | null = null;
-  private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
-  private keyA: Phaser.Input.Keyboard.Key | null = null;
-  private keyD: Phaser.Input.Keyboard.Key | null = null;
+  public track!: Track;
+  public car!: Car;
+  public fuelSystem!: FuelSystem;
+  public lapManager!: LapManager;
+  public inputManager!: InputManager;
+
+  private carSprite: Phaser.GameObjects.Sprite | null = null;
+  private trackImage: Phaser.GameObjects.Image | null = null;
+  private isRaceActive = false;
 
   constructor() {
     super('RaceScene');
   }
 
   public create(): void {
-    // 1. Draw Closed-Circuit Retro Track
-    this.drawRetroTrack();
+    // 1. Initialize Racetrack
+    this.track = new Track();
 
-    // 2. Determine Player Car Color
+    // 2. Render Track to Texture once for maximum 60FPS performance
+    if (!this.textures.exists('racetrack_surface')) {
+      const trackCanvas = this.track.renderToCanvas();
+      this.textures.addCanvas('racetrack_surface', trackCanvas);
+    }
+    this.trackImage = this.add.image(0, 0, 'racetrack_surface').setOrigin(0, 0);
+
+    // 3. Initialize Car at Start / Finish Line
+    this.car = new Car(
+      this.track.startPosition.x,
+      this.track.startPosition.y,
+      this.track.startAngle
+    );
+
+    // 4. Initialize Fuel & Lap Systems
+    this.fuelSystem = new FuelSystem(
+      DEFAULT_CONFIG.initialFuelMs,
+      DEFAULT_CONFIG.tankMaxMs,
+      DEFAULT_CONFIG.pitBelowFraction
+    );
+    this.lapManager = new LapManager(this.track.gates);
+    this.inputManager = new InputManager();
+
+    // 5. Setup Lap Events
+    this.lapManager.setListeners({
+      onLapComplete: (ev: LapCompleteEvent) => {
+        sounds.playLap();
+        Vibration.lap();
+        console.log(
+          `[Lap] Lap ${ev.lapNumber} complete! Driving time: ${(ev.drivingTimeMs / 1000).toFixed(2)}s, Total time: ${(ev.totalTimeMs / 1000).toFixed(2)}s`
+        );
+      },
+    });
+
+    // 6. Setup Fuel Events
+    this.fuelSystem.setListeners({
+      onLowFuel: () => {
+        sounds.playLowFuelBeep();
+      },
+      onEmpty: () => {
+        console.log('[Fuel] Fuel tank empty - car stopped');
+      },
+    });
+
+    // 7. Setup Car Sprite
     const stored = Storage.getPlayer();
     const colorIndex = this.getCarColorIndex(stored?.playerId || 'player');
+    this.carSprite = this.add.sprite(this.car.x, this.car.y, `car_${colorIndex}`);
+    this.carSprite.setOrigin(0.5, 0.5);
+    this.carSprite.setDepth(10);
 
-    // 3. Create Player Car Sprite
-    this.playerCar = this.add.sprite(180, 520, `car_${colorIndex}`);
-    this.playerCar.setOrigin(0.5, 0.5);
-    this.playerCar.setScale(1.2);
+    // 8. Setup Camera: smooth follow with lookahead, 360 px width visible
+    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    this.cameras.main.setZoom(1.0); // 360 world px wide visible
+    this.cameras.main.roundPixels = true;
+    this.cameras.main.scrollX = this.car.x - this.cameras.main.width / 2;
+    this.cameras.main.scrollY = this.car.y - this.cameras.main.height / 2;
 
-    // 4. Setup Input Controls for keyboard testing
-    if (this.input.keyboard) {
-      this.cursors = this.input.keyboard.createCursorKeys();
-      this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-      this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-    }
+    // Listen to state changes to enable/disable active race driving
+    stateMachine.subscribe((newState: GameState) => {
+      this.isRaceActive = newState === 'RACING';
+      if (this.isRaceActive) {
+        sounds.startEngine();
+      } else {
+        sounds.stopEngine();
+      }
+    });
+
+    this.isRaceActive = stateMachine.getState() === 'RACING';
   }
 
   public updateCarTexture(playerId: string): void {
     const idx = this.getCarColorIndex(playerId);
-    if (this.playerCar && this.textures.exists(`car_${idx}`)) {
-      this.playerCar.setTexture(`car_${idx}`);
+    if (this.carSprite && this.textures.exists(`car_${idx}`)) {
+      this.carSprite.setTexture(`car_${idx}`);
     }
   }
 
@@ -50,68 +116,60 @@ export class RaceScene extends Phaser.Scene {
     return Math.abs(hash) % PALETTE.carColors.length;
   }
 
-  private drawRetroTrack(): void {
-    const g = this.add.graphics();
+  public override update(_time: number, delta: number): void {
+    const dt = Math.min(0.1, delta / 1000); // delta in seconds
+    const deltaMs = delta;
 
-    // Grass background
-    g.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.grass).color, 1);
-    g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    const steerInput = this.inputManager.getSteerInput();
+    const hasFuel = !this.fuelSystem.isEmpty();
 
-    // Outer Asphalt Oval
-    g.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.asphalt).color, 1);
-    g.fillRoundedRect(24, 40, GAME_WIDTH - 48, GAME_HEIGHT - 80, 70);
+    // In RACING state: update car arcade physics and fuel drain
+    if (this.isRaceActive) {
+      this.car.update(dt, steerInput, hasFuel, this.track);
+      this.fuelSystem.update(deltaMs, this.car.speed);
+      this.lapManager.update(
+        { x: this.car.x, y: this.car.y },
+        this.car.getTelemetry().velocity,
+        deltaMs,
+        true
+      );
 
-    // Track outer border (kerb)
-    g.lineStyle(4, Phaser.Display.Color.HexStringToColor(PALETTE.kerbRed).color, 1);
-    g.strokeRoundedRect(24, 40, GAME_WIDTH - 48, GAME_HEIGHT - 80, 70);
+      // Sound modulation
+      const speedRatio = this.car.forwardSpeed / Car.MAX_SPEED;
+      sounds.updateEnginePitch(speedRatio);
+      sounds.updateGrassRumble(!this.car.onRoad && this.car.speed > 8);
 
-    // Infield grass
-    g.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.grass).color, 1);
-    g.fillRoundedRect(90, 130, GAME_WIDTH - 180, GAME_HEIGHT - 260, 45);
+      if (this.fuelSystem.isLowFuel()) {
+        sounds.playLowFuelBeep();
+      }
+    } else {
+      sounds.stopGrassRumble();
+    }
 
-    // Track inner border (kerb)
-    g.lineStyle(4, Phaser.Display.Color.HexStringToColor(PALETTE.kerbWhite).color, 1);
-    g.strokeRoundedRect(90, 130, GAME_WIDTH - 180, GAME_HEIGHT - 260, 45);
+    // Update Car Sprite Transform
+    if (this.carSprite) {
+      this.carSprite.setPosition(this.car.x, this.car.y);
+      // Sprite points North; heading 0 is East -> offset by +90 deg
+      this.carSprite.setRotation(this.car.heading + Math.PI / 2);
+    }
 
-    // Finish line at the bottom straight
-    this.add.image(180, 560, 'finish_line').setDisplaySize(64, 16);
+    // Camera follow with lookahead
+    const lookAheadDist = 55;
+    const targetX = this.car.x + Math.cos(this.car.heading) * lookAheadDist;
+    const targetY = this.car.y + Math.sin(this.car.heading) * lookAheadDist;
 
-    // Center infield logo / tech fest watermark
-    const textCouncil = this.add.text(180, 290, 'CRESCENDO', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '11px',
-      color: PALETTE.accentYellow,
-    });
-    textCouncil.setOrigin(0.5, 0.5);
+    const destScrollX = targetX - this.cameras.main.width / 2;
+    const destScrollY = targetY - this.cameras.main.height / 2;
 
-    const textYear = this.add.text(180, 314, '2026', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '16px',
-      color: PALETTE.cyan,
-    });
-    textYear.setOrigin(0.5, 0.5);
-
-    const textCouncilSub = this.add.text(180, 338, 'FRCRCE', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '8px',
-      color: '#ffffff',
-    });
-    textCouncilSub.setOrigin(0.5, 0.5);
+    this.cameras.main.scrollX = Phaser.Math.Linear(this.cameras.main.scrollX, destScrollX, 0.1);
+    this.cameras.main.scrollY = Phaser.Math.Linear(this.cameras.main.scrollY, destScrollY, 0.1);
   }
 
-  public override update(_time: number, _delta: number): void {
-    if (stateMachine.getState() === 'RACING' && this.playerCar) {
-      // In Stage 1: show steering preview responsiveness
-      const isLeft = (this.cursors && this.cursors.left.isDown) || (this.keyA && this.keyA.isDown);
-      const isRight = (this.cursors && this.cursors.right.isDown) || (this.keyD && this.keyD.isDown);
-
-      if (isLeft) {
-        this.playerCar.angle = Math.max(this.playerCar.angle - 3, -30);
-      } else if (isRight) {
-        this.playerCar.angle = Math.min(this.playerCar.angle + 3, 30);
-      } else {
-        this.playerCar.angle = this.playerCar.angle * 0.85;
-      }
+  public destroy(): void {
+    this.inputManager?.destroy();
+    sounds.stopEngine();
+    if (this.trackImage) {
+      this.trackImage.destroy();
     }
   }
 }

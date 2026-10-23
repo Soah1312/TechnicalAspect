@@ -18,7 +18,7 @@ async function bootstrap() {
   const game = createGame();
 
   // 2. Initialize UI Screen Manager
-  new ScreenManager(uiContainer, mockApi);
+  new ScreenManager(uiContainer, mockApi, game);
 
   // 3. Audio unlock on first user tap/click anywhere
   const unlockAudio = () => {

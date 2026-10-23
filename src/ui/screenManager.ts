@@ -1,4 +1,6 @@
 import type { GameApi, GameConfig, PlayerState } from '../api/types';
+import type Phaser from 'phaser';
+import type { RaceScene } from '../game/scenes/RaceScene';
 import { stateMachine, type GameState } from '../game/stateMachine';
 import { renderLoadingScreen } from './screens/LoadingScreen';
 import { renderJoinScreen } from './screens/JoinScreen';
@@ -16,15 +18,17 @@ import { clock } from '../util/clock';
 export class ScreenManager {
   private container: HTMLElement;
   private api: GameApi;
+  private game: Phaser.Game | null = null;
   private activeCleanup: (() => void) | null = null;
   private debugOverlayEl: HTMLElement | null = null;
   private frameCount = 0;
   private lastFpsTime = performance.now();
   private currentFps = 60;
 
-  constructor(container: HTMLElement, api: GameApi) {
+  constructor(container: HTMLElement, api: GameApi, game?: Phaser.Game) {
     this.container = container;
     this.api = api;
+    this.game = game || null;
 
     // Listen to state changes
     stateMachine.subscribe((newState, _prevState, context) => {
@@ -34,6 +38,10 @@ export class ScreenManager {
     if (DEBUG_CONFIG.isDebug) {
       this.setupDebugOverlay();
     }
+  }
+
+  public setGame(game: Phaser.Game): void {
+    this.game = game;
   }
 
   private setupDebugOverlay(): void {
@@ -118,13 +126,10 @@ export class ScreenManager {
           wrongLockoutMs: 3000,
           minLapMs: 36000,
         };
-        const initialFuelMs = context.initialFuelMs as number | undefined;
-        const initialLaps = context.initialLaps as number | undefined;
+        const raceScene = this.game?.scene.getScene('RaceScene') as RaceScene | undefined;
         this.activeCleanup = renderRacingHud(this.container, {
-          api: this.api,
           config,
-          initialFuelMs,
-          initialLaps,
+          raceScene,
         });
         break;
       }

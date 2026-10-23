@@ -577,3 +577,81 @@ p.retro-text {
     opacity: 0.3;
   }
 }
+
+/* Mobile Thumb Steering Controls */
+.steer-controls-container {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 16px;
+  pointer-events: none;
+  z-index: 25;
+}
+
+.steer-thumb-btn {
+  width: 76px;
+  height: 76px;
+  border-radius: 8px;
+  background-color: rgba(22, 22, 42, 0.65);
+  border: 3px solid var(--cyan);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.3), 3px 3px 0px #000;
+  color: #ffffff;
+  font-family: var(--font-retro);
+  font-size: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  transition: transform 0.05s ease, background-color 0.1s ease;
+}
+
+.steer-thumb-btn.steer-btn-active {
+  background-color: rgba(0, 229, 255, 0.45);
+  border-color: var(--accent-yellow);
+  box-shadow: 0 0 14px rgba(255, 212, 0, 0.6), 1px 1px 0px #000;
+  transform: scale(0.92);
+  color: var(--accent-yellow);
+}
+
+/* Pulsing Pit Button */
+.pulsing-pit {
+  animation: pulsePit 0.75s infinite alternate ease-in-out;
+  background-color: var(--accent-yellow) !important;
+  color: #000000 !important;
+}
+
+@keyframes pulsePit {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 4px rgba(255, 212, 0, 0.6), 3px 3px 0px #000;
+  }
+  100% {
+    transform: scale(1.06);
+    box-shadow: 0 0 14px rgba(255, 212, 0, 1), 4px 4px 0px #000;
+  }
+}
+
+/* Minimap container */
+.minimap-frame {
+  position: absolute;
+  top: 50px;
+  right: 10px;
+  width: 80px;
+  height: 80px;
+  background-color: rgba(11, 11, 30, 0.85);
+  border: 2px solid #ffffff;
+  box-shadow: 3px 3px 0px var(--border-dark);
+  pointer-events: none;
+  z-index: 22;
+}
+
+.minimap-frame canvas {
+  width: 80px;
+  height: 80px;
+  display: block;
+}
