@@ -30,7 +30,10 @@ const CARDS: CardInfo[] = [
   },
 ];
 
-export function renderHowToPlayScreen(container: HTMLElement): () => void {
+export function renderHowToPlayScreen(
+  container: HTMLElement,
+  context?: Record<string, unknown>
+): () => void {
   let currentIndex = 0;
   let touchStartX = 0;
 
@@ -125,7 +128,7 @@ export function renderHowToPlayScreen(container: HTMLElement): () => void {
   const handleFinish = () => {
     sounds.unlock();
     Storage.setTutorialSeen();
-    stateMachine.transition('LOBBY');
+    stateMachine.transition('LOBBY', context);
   };
 
   updateCardView();

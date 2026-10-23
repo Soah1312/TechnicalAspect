@@ -18,14 +18,16 @@ CREATE TABLE IF NOT EXISTS public.game_config (
   min_lap_ms int NOT NULL DEFAULT 36000
 );
 
--- Seed single game_config row with Stage 4 parameters
+-- Seed single game_config row:
+-- Defaults to open immediately for 30 days for frictionless testing.
+-- On event day, run: UPDATE public.game_config SET start_at = '2026-10-26 13:15:00+05:30', end_at = '2026-10-26 13:45:00+05:30';
 INSERT INTO public.game_config (
   id, start_at, end_at, is_open, tank_max_ms, initial_fuel_ms,
   fuel_per_correct_ms, pit_below_fraction, question_time_ms, wrong_lockout_ms, min_lap_ms
 ) VALUES (
   1,
-  '2026-10-26 13:15:00+05:30',
-  '2026-10-26 13:45:00+05:30',
+  now() - interval '1 hour',
+  now() + interval '30 days',
   true,
   30000,
   30000,

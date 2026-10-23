@@ -89,13 +89,14 @@ export function renderJoinScreen(
     try {
       const player = await api.joinRace(name);
       sounds.playCorrect();
+      const config = await api.getConfig();
 
       // Check if tutorial seen this session
       const tutorialSeen = Storage.isTutorialSeen();
       if (!tutorialSeen) {
-        stateMachine.transition('HOW_TO_PLAY', { player });
+        stateMachine.transition('HOW_TO_PLAY', { player, config });
       } else {
-        stateMachine.transition('LOBBY', { player });
+        stateMachine.transition('LOBBY', { player, config });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'FAILED TO JOIN RACE';

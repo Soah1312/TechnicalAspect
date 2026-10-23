@@ -24,11 +24,17 @@ export class ScreenManager {
   private frameCount = 0;
   private lastFpsTime = performance.now();
   private currentFps = 60;
+  private cachedConfig: GameConfig | null = null;
 
   constructor(container: HTMLElement, api: GameApi, game?: Phaser.Game) {
     this.container = container;
     this.api = api;
     this.game = game || null;
+
+    // Fetch and cache authoritative server config
+    this.api.getConfig().then((cfg) => {
+      this.cachedConfig = cfg;
+    }).catch(() => {});
 
     // Listen to state changes
     stateMachine.subscribe((newState, _prevState, context) => {
@@ -70,7 +76,26 @@ export class ScreenManager {
       this.activeCleanup = null;
     }
 
+    if (context.config) {
+      this.cachedConfig = context.config as GameConfig;
+    }
+
     this.container.innerHTML = '';
+
+    const resolvedConfig: GameConfig =
+      (context.config as GameConfig) ||
+      this.cachedConfig || {
+        startAt: Date.now() + 10000,
+        endAt: Date.now() + 190000,
+        isOpen: true,
+        tankMaxMs: 30000,
+        initialFuelMs: 30000,
+        fuelPerCorrectMs: 20000,
+        pitBelowFraction: 0.5,
+        questionTimeMs: 15000,
+        wrongLockoutMs: 3000,
+        minLapMs: 36000,
+      };
 
     switch (state) {
       case 'LOADING': {
@@ -86,25 +111,13 @@ export class ScreenManager {
       }
 
       case 'HOW_TO_PLAY': {
-        this.activeCleanup = renderHowToPlayScreen(this.container);
+        this.activeCleanup = renderHowToPlayScreen(this.container, context);
         break;
       }
 
       case 'LOBBY': {
-        const config = (context.config as GameConfig) || {
-          startAt: Date.now() + 10000,
-          endAt: Date.now() + 190000,
-          isOpen: true,
-          tankMaxMs: 30000,
-          initialFuelMs: 30000,
-          fuelPerCorrectMs: 20000,
-          pitBelowFraction: 0.5,
-          questionTimeMs: 15000,
-          wrongLockoutMs: 3000,
-          minLapMs: 36000,
-        };
         const player = context.player ? (context.player as PlayerState) : null;
-        this.activeCleanup = renderLobbyScreen(this.container, config, player);
+        this.activeCleanup = renderLobbyScreen(this.container, resolvedConfig, player);
         break;
       }
 
@@ -114,45 +127,21 @@ export class ScreenManager {
       }
 
       case 'RACING': {
-        const config = (context.config as GameConfig) || {
-          startAt: Date.now() - 1000,
-          endAt: Date.now() + 180000,
-          isOpen: true,
-          tankMaxMs: 30000,
-          initialFuelMs: 30000,
-          fuelPerCorrectMs: 20000,
-          pitBelowFraction: 0.5,
-          questionTimeMs: 15000,
-          wrongLockoutMs: 3000,
-          minLapMs: 36000,
-        };
         const raceScene = this.game?.scene.getScene('RaceScene') as RaceScene | undefined;
         this.activeCleanup = renderRacingHud(this.container, {
           api: this.api,
-          config,
+          config: resolvedConfig,
           raceScene,
         });
         break;
       }
 
       case 'PIT': {
-        const config = (context.config as GameConfig) || {
-          startAt: Date.now() - 1000,
-          endAt: Date.now() + 180000,
-          isOpen: true,
-          tankMaxMs: 30000,
-          initialFuelMs: 30000,
-          fuelPerCorrectMs: 20000,
-          pitBelowFraction: 0.5,
-          questionTimeMs: 15000,
-          wrongLockoutMs: 3000,
-          minLapMs: 36000,
-        };
         const raceScene = this.game?.scene.getScene('RaceScene') as RaceScene | undefined;
         const reason = (context.reason as 'dry' | 'voluntary') ?? 'dry';
         this.activeCleanup = renderPitScreen(this.container, {
           api: this.api,
-          config,
+          config: resolvedConfig,
           raceScene,
           reason,
         });
