@@ -143,10 +143,12 @@ export function renderPitScreen(
       // Start 15s question countdown
       questionStart = Date.now();
       startQuestionCountdown();
-    } catch {
+    } catch (err: unknown) {
+      console.error('[PitScreen] fetchQuestion error:', err);
+      const errMsg = err instanceof Error ? err.message : 'FAILED TO LOAD QUESTION';
       if (qTextEl) {
         qTextEl.innerHTML = `
-          <span style="color:var(--wrong-red);">NETWORK GLITCH!</span><br/>
+          <span style="color:var(--wrong-red); font-size:9px;">${errMsg.toUpperCase()}</span><br/>
           <button id="retry-question-btn" class="retro-btn btn-secondary" style="margin-top:8px; width:auto; padding:6px 12px;">
             RETRY QUESTION
           </button>

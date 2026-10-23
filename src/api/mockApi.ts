@@ -175,10 +175,8 @@ export class MockApi implements GameApi {
       if (now - issuedAt < this.config.questionTimeMs) {
         return this.currentIssuedQuestion;
       } else {
-        // Timed out: apply lockout
-        this.lockedUntil = now + this.config.wrongLockoutMs;
+        // Timed out: clear and proceed to issue next question
         this.currentIssuedQuestion = null;
-        throw new Error('Previous question timed out. Lockout applied.');
       }
     }
 

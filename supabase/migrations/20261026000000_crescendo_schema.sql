@@ -253,8 +253,8 @@ BEGIN
     IF (now() - v_issued.issued_at) < (v_cfg.question_time_ms * interval '1 millisecond') THEN
       -- Re-return the current question with its stored option order
       SELECT * INTO v_q FROM public.questions WHERE id = v_issued.question_id;
-      SELECT jsonb_agg(v_q.options->((idx)::int)) INTO v_shuffled_options 
-        FROM jsonb_array_elements_text(v_issued.option_order) AS idx;
+      SELECT jsonb_agg(v_q.options->(val::int) ORDER BY ord) INTO v_shuffled_options 
+        FROM jsonb_array_elements_text(v_issued.option_order) WITH ORDINALITY AS t(val, ord);
 
       RETURN json_build_object(
         'questionId', v_q.id,
@@ -262,15 +262,12 @@ BEGIN
         'options', v_shuffled_options
       );
     ELSE
-      -- Timed out: mark as wrong and apply lockout
+      -- Timed out: mark as wrong, clear current question, and proceed to issue next question
       UPDATE public.issued_questions SET answered_at = now(), was_correct = false WHERE id = v_issued.id;
       UPDATE public.players SET 
         wrong_answers = wrong_answers + 1,
-        locked_until = now() + (v_cfg.wrong_lockout_ms * interval '1 millisecond'),
         current_question_id = NULL
       WHERE id = v_player_id;
-
-      RAISE EXCEPTION 'Previous question timed out. Lockout applied.';
     END IF;
   END IF;
 
