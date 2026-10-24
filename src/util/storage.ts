@@ -3,6 +3,8 @@ import { DEBUG_CONFIG } from '../config/constants';
 const KEYS = {
   PLAYER_ID: 'cfr_player_id',
   PLAYER_NAME: 'cfr_player_name',
+  PLAYER_YEAR: 'cfr_player_year',
+  PLAYER_BRANCH: 'cfr_player_branch',
   TUTORIAL_SEEN: 'cfr_tutorial_seen',
   AUDIO_MUTED: 'cfr_audio_muted',
 };
@@ -12,6 +14,8 @@ if (typeof window !== 'undefined' && DEBUG_CONFIG.forceReset) {
   try {
     localStorage.removeItem(KEYS.PLAYER_ID);
     localStorage.removeItem(KEYS.PLAYER_NAME);
+    localStorage.removeItem(KEYS.PLAYER_YEAR);
+    localStorage.removeItem(KEYS.PLAYER_BRANCH);
     localStorage.removeItem(KEYS.AUDIO_MUTED);
     sessionStorage.removeItem(KEYS.TUTORIAL_SEEN);
   } catch (err) {
@@ -20,13 +24,15 @@ if (typeof window !== 'undefined' && DEBUG_CONFIG.forceReset) {
 }
 
 export const Storage = {
-  getPlayer(): { playerId: string; name: string } | null {
+  getPlayer(): { playerId: string; name: string; year?: string; branch?: string } | null {
     try {
       if (typeof localStorage === 'undefined') return null;
       const id = localStorage.getItem(KEYS.PLAYER_ID);
       const name = localStorage.getItem(KEYS.PLAYER_NAME);
+      const year = localStorage.getItem(KEYS.PLAYER_YEAR) || undefined;
+      const branch = localStorage.getItem(KEYS.PLAYER_BRANCH) || undefined;
       if (id && name) {
-        return { playerId: id, name };
+        return { playerId: id, name, year, branch };
       }
     } catch {
       // Ignore storage access errors
@@ -34,11 +40,17 @@ export const Storage = {
     return null;
   },
 
-  setPlayer(playerId: string, name: string): void {
+  setPlayer(playerId: string, name: string, year?: string, branch?: string): void {
     try {
       if (typeof localStorage === 'undefined') return;
       localStorage.setItem(KEYS.PLAYER_ID, playerId);
       localStorage.setItem(KEYS.PLAYER_NAME, name);
+      if (year) {
+        localStorage.setItem(KEYS.PLAYER_YEAR, year);
+      }
+      if (branch) {
+        localStorage.setItem(KEYS.PLAYER_BRANCH, branch);
+      }
     } catch {
       // Ignore
     }
@@ -82,6 +94,8 @@ export const Storage = {
     try {
       localStorage.removeItem(KEYS.PLAYER_ID);
       localStorage.removeItem(KEYS.PLAYER_NAME);
+      localStorage.removeItem(KEYS.PLAYER_YEAR);
+      localStorage.removeItem(KEYS.PLAYER_BRANCH);
     } catch {
       // Ignore
     }

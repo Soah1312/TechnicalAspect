@@ -5,6 +5,7 @@
 export interface InternalQuestion {
   id: string;
   category: string;
+  year?: string;
   text: string;
   options: [string, string, string, string];
   correctIndex: number;

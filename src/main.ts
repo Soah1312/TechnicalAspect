@@ -123,8 +123,8 @@ async function bootstrap() {
     // 9. Check Existing Player Session for Sensible Resume
     const storedPlayer = Storage.getPlayer();
 
-    if (!storedPlayer) {
-      stateMachine.forceState('JOIN');
+    if (!storedPlayer || !storedPlayer.year || !storedPlayer.branch) {
+      stateMachine.forceState('JOIN', { defaultName: storedPlayer?.name || '' });
       return;
     }
 

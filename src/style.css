@@ -202,6 +202,42 @@ p.retro-text {
   text-transform: uppercase;
 }
 
+.retro-select {
+  font-family: var(--font-retro);
+  font-size: 11px;
+  padding: 10px 8px;
+  width: 100%;
+  background-color: #000000;
+  color: #ffffff;
+  border: 3px solid var(--cyan);
+  box-shadow: 3px 3px 0px var(--border-dark);
+  outline: none;
+  text-align: center;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpolygon%20points%3D%222%2C4%2010%2C4%206%2C9%22%20fill%3D%22%2300f0ff%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px;
+}
+
+.retro-select option {
+  background-color: #121226;
+  color: #ffffff;
+  font-family: var(--font-retro);
+}
+
+.retro-select:focus {
+  border-color: var(--accent-yellow);
+  box-shadow: 3px 3px 0px var(--cyan);
+}
+
+.retro-select.input-error {
+  border-color: var(--wrong-red);
+  box-shadow: 3px 3px 0px #700;
+}
+
 .retro-input:focus {
   border-color: var(--accent-yellow);
   box-shadow: 3px 3px 0px var(--cyan);

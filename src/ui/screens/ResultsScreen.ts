@@ -29,7 +29,9 @@ export function renderResultsScreen(
 
         <!-- Player Stat Summary -->
         <div class="retro-panel" style="width:100%; margin-top: 8px;">
-          <p class="retro-text highlight" style="margin-bottom: 8px;">${player?.name || 'RACER'}</p>
+          <p class="retro-text highlight" style="margin-bottom: 8px;">
+            ${player?.name || 'RACER'}${player?.year || player?.branch ? ` <span class="cyan-text" style="font-size:8px;">[${player.year || ''} ${player.branch || ''}]</span>` : ''}
+          </p>
           <div style="display:flex; justify-content:space-around; text-align:center;">
             <div>
               <span class="retro-text" style="font-size:7px; color:var(--cyan);">LAPS</span>

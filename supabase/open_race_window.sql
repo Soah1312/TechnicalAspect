@@ -161,7 +161,7 @@ BEGIN
 
   -- Randomly shuffle options 0, 1, 2, 3
   WITH shuffled AS (
-    SELECT elem - 1 as orig_idx
+    SELECT (elem - 1)::int as orig_idx
     FROM jsonb_array_elements_text('["1","2","3","4"]'::jsonb) WITH ORDINALITY arr(val, elem)
     ORDER BY random()
   )

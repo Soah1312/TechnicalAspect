@@ -14,6 +14,8 @@ export interface GameConfig {
 export interface PlayerState {
   playerId: string;
   name: string;
+  year?: string;
+  branch?: string;
   laps: number;
   correct: number;
 }
@@ -55,7 +57,7 @@ export interface LeaderboardSnapshot {
 export interface GameApi {
   getConfig(): Promise<GameConfig>;
   getServerTime(): Promise<number>; // epoch ms
-  joinRace(name: string): Promise<PlayerState>; // idempotent per auth user (resume)
+  joinRace(name: string, year?: string, branch?: string): Promise<PlayerState>; // idempotent per auth user (resume)
   requestQuestion(): Promise<Question>;
   submitAnswer(questionId: string, optionIndex: number): Promise<AnswerResult>;
   submitLap(lapNumber: number, lapTimeMs: number): Promise<LapResult>;

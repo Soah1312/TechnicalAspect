@@ -33,10 +33,19 @@ export function renderLobbyScreen(
         <h1 class="retro-title">STARTING GRID</h1>
 
         <div class="retro-panel" style="max-width: 300px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
             <span class="retro-text highlight">RACER:</span>
             <span class="retro-text" style="color: ${carColor};">${player?.name || 'GUEST DRIVER'}</span>
           </div>
+          ${
+            player?.year || player?.branch
+              ? `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span class="retro-text highlight">CLASS:</span>
+            <span class="retro-text cyan-text">${player.year || ''} ${player.branch || ''}</span>
+          </div>`
+              : ''
+          }
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <span class="retro-text">CAR COLOR:</span>
             <div style="width: 24px; height: 16px; background-color: ${carColor}; border: 2px solid #fff;"></div>

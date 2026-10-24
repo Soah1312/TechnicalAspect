@@ -3,11 +3,18 @@ import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
 import { sounds } from '../../audio/soundManager';
 
+const YEARS = ['FE', 'SE', 'TE', 'BE'] as const;
+const BRANCHES = ['COMPS', 'CSE', 'ECS', 'MECH'] as const;
+
 export function renderJoinScreen(
   container: HTMLElement,
   api: GameApi,
   defaultName = ''
 ): () => void {
+  const storedPlayer = Storage.getPlayer();
+  const initialYear = storedPlayer?.year || 'FE';
+  const initialBranch = storedPlayer?.branch || 'COMPS';
+
   container.innerHTML = `
     <div class="screen-layer">
       <div class="scanlines"></div>
@@ -18,7 +25,7 @@ export function renderJoinScreen(
         </div>
 
         <div class="retro-panel">
-          <label for="player-name-input" class="retro-text highlight" style="display:block; margin-bottom: 8px;">
+          <label for="player-name-input" class="retro-text highlight" style="display:block; margin-bottom: 6px;">
             ENTER DRIVER NAME
           </label>
           <input
@@ -30,8 +37,33 @@ export function renderJoinScreen(
             autocomplete="off"
             autocorrect="off"
             spellcheck="false"
-            value="${defaultName}"
+            value="${defaultName || storedPlayer?.name || ''}"
           />
+
+          <div style="display:flex; gap:8px; margin-top: 10px;">
+            <div style="flex:1;">
+              <label for="player-year-select" class="retro-text highlight" style="display:block; margin-bottom: 4px; font-size: 8px;">
+                YEAR
+              </label>
+              <select id="player-year-select" class="retro-select">
+                ${YEARS.map(
+                  (y) => `<option value="${y}" ${y === initialYear ? 'selected' : ''}>${y}</option>`
+                ).join('')}
+              </select>
+            </div>
+
+            <div style="flex:1.2;">
+              <label for="player-branch-select" class="retro-text highlight" style="display:block; margin-bottom: 4px; font-size: 8px;">
+                BRANCH
+              </label>
+              <select id="player-branch-select" class="retro-select">
+                ${BRANCHES.map(
+                  (b) => `<option value="${b}" ${b === initialBranch ? 'selected' : ''}>${b}</option>`
+                ).join('')}
+              </select>
+            </div>
+          </div>
+
           <div id="join-error" class="error-banner" style="margin-top: 8px;"></div>
         </div>
 
@@ -47,6 +79,8 @@ export function renderJoinScreen(
   `;
 
   const input = container.querySelector('#player-name-input') as HTMLInputElement | null;
+  const yearSelect = container.querySelector('#player-year-select') as HTMLSelectElement | null;
+  const branchSelect = container.querySelector('#player-branch-select') as HTMLSelectElement | null;
   const button = container.querySelector('#start-engine-btn') as HTMLButtonElement | null;
   const errorBox = container.querySelector('#join-error') as HTMLDivElement | null;
 
@@ -70,8 +104,10 @@ export function renderJoinScreen(
   const handleSubmit = async () => {
     sounds.unlock();
 
-    if (!input || !button || !errorBox) return;
+    if (!input || !button || !errorBox || !yearSelect || !branchSelect) return;
     const name = input.value.trim();
+    const year = yearSelect.value;
+    const branch = branchSelect.value;
     const error = validate(name);
 
     if (error) {
@@ -87,7 +123,7 @@ export function renderJoinScreen(
     button.textContent = 'CONNECTING...';
 
     try {
-      const player = await api.joinRace(name);
+      const player = await api.joinRace(name, year, branch);
       sounds.playCorrect();
       const config = await api.getConfig();
 

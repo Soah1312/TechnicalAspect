@@ -171,7 +171,7 @@ export class SupabaseApi implements GameApi {
   /**
    * Join or resume player in race
    */
-  public async joinRace(name: string): Promise<PlayerState> {
+  public async joinRace(name: string, year?: string, branch?: string): Promise<PlayerState> {
     const userId = await this.ensureAuth();
     const res = await this.rpcWithTimeout<{
       playerId: string;
@@ -183,11 +183,13 @@ export class SupabaseApi implements GameApi {
     const player: PlayerState = {
       playerId: res.playerId || userId,
       name: res.name,
+      year,
+      branch,
       laps: Number(res.laps || 0),
       correct: Number(res.correct || 0),
     };
 
-    Storage.setPlayer(player.playerId, player.name);
+    Storage.setPlayer(player.playerId, player.name, year, branch);
     return player;
   }
 

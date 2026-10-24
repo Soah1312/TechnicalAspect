@@ -122,6 +122,12 @@ export function renderRacingHud(
               FETCHING LIVE TELEMETRY...
             </p>
           </div>
+
+          <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px; text-align: center;">
+            <button id="hud-change-driver-btn" class="retro-btn btn-secondary" style="font-size:8px; padding:6px 12px; width:auto;">
+              CHANGE DRIVER / CLASS
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -205,6 +211,12 @@ export function renderRacingHud(
 
   closeLbBtn?.addEventListener('click', () => {
     closeLeaderboard();
+  });
+
+  const changeDriverBtn = container.querySelector('#hud-change-driver-btn') as HTMLButtonElement | null;
+  changeDriverBtn?.addEventListener('click', () => {
+    closeLeaderboard();
+    stateMachine.transition('JOIN', {});
   });
 
   lbModalEl?.addEventListener('click', (e) => {

@@ -123,7 +123,7 @@ export class MockApi implements GameApi {
     return Date.now() + 45;
   }
 
-  public async joinRace(name: string): Promise<PlayerState> {
+  public async joinRace(name: string, year?: string, branch?: string): Promise<PlayerState> {
     await this.delay();
     const cleanName = name.trim();
 
@@ -143,11 +143,13 @@ export class MockApi implements GameApi {
     this.player = {
       playerId,
       name: cleanName,
+      year: year || this.player?.year,
+      branch: branch || this.player?.branch,
       laps: this.player ? this.player.laps : 0,
       correct: this.player ? this.player.correct : 0,
     };
 
-    Storage.setPlayer(playerId, cleanName);
+    Storage.setPlayer(playerId, cleanName, this.player.year, this.player.branch);
     return { ...this.player };
   }
 
@@ -176,12 +178,35 @@ export class MockApi implements GameApi {
       }
     }
 
+    // Year-based category mapping
+    const yearCategoryMap: Record<string, string[]> = {
+      FE: ['Programming', 'History'],
+      SE: ['Programming', 'Data Structures', 'Algorithms'],
+      TE: ['Operating Systems', 'Databases', 'Networking'],
+      BE: ['Operating Systems', 'Databases', 'Networking', 'Web', 'Algorithms'],
+    };
+
+    const playerYear = this.player?.year || Storage.getPlayer()?.year;
+    const allowedCategories = playerYear && yearCategoryMap[playerYear] ? yearCategoryMap[playerYear] : null;
+
+    // Filter by year if specific question has year OR category matches student year
+    const matchesYear = (q: typeof MOCK_QUESTIONS[0]) => {
+      if (!allowedCategories) return true;
+      if (q.year) return q.year === playerYear;
+      return allowedCategories.includes(q.category);
+    };
+
     // Find available questions not yet seen
-    let available = MOCK_QUESTIONS.filter((q) => !this.seenQuestionIds.has(q.id));
+    let yearPool = MOCK_QUESTIONS.filter(matchesYear);
+    if (yearPool.length === 0) {
+      yearPool = [...MOCK_QUESTIONS];
+    }
+
+    let available = yearPool.filter((q) => !this.seenQuestionIds.has(q.id));
     if (available.length === 0) {
-      // All 60 questions used! Reset seen set to recycle
+      // Recycle unseen for this pool or full pool
       this.seenQuestionIds.clear();
-      available = [...MOCK_QUESTIONS];
+      available = [...yearPool];
     }
 
     // Pick random question from available pool
