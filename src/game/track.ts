@@ -209,6 +209,13 @@ export class Track {
     return gates;
   }
 
+  // Pre-allocated object reused every frame to eliminate GC allocation pressure
+  private readonly _nearestResult: { point: TrackPoint; distance: number; onRoad: boolean } = {
+    point: null as unknown as TrackPoint,
+    distance: 0,
+    onRoad: false,
+  };
+
   /**
    * Fast nearest centerline point lookup using local search window around lastKnownIndex
    */
@@ -252,11 +259,10 @@ export class Track {
     }
 
     const dist = Math.sqrt(bestDistSq);
-    return {
-      point: this.points[bestIndex],
-      distance: dist,
-      onRoad: dist <= ROAD_HALF_WIDTH,
-    };
+    this._nearestResult.point = this.points[bestIndex];
+    this._nearestResult.distance = dist;
+    this._nearestResult.onRoad = dist <= ROAD_HALF_WIDTH;
+    return this._nearestResult;
   }
 
   /**
@@ -435,16 +441,22 @@ export class Track {
     return mini;
   }
 
+  // Pre-allocated minimap coordinate object
+  private readonly _minimapCoord = { mx: 0, my: 0 };
+
   /**
    * Convert world coordinates to 80x80 minimap coordinates
    */
-  public worldToMinimap(wx: number, wy: number): { mx: number; my: number } {
+  public worldToMinimap(
+    wx: number,
+    wy: number,
+    out: { mx: number; my: number } = this._minimapCoord
+  ): { mx: number; my: number } {
     const pad = 6;
     const scaleX = (80 - pad * 2) / WORLD_WIDTH;
     const scaleY = (80 - pad * 2) / WORLD_HEIGHT;
-    return {
-      mx: pad + wx * scaleX,
-      my: pad + wy * scaleY,
-    };
+    out.mx = pad + wx * scaleX;
+    out.my = pad + wy * scaleY;
+    return out;
   }
 }

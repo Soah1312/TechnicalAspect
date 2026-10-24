@@ -111,7 +111,7 @@ export function renderRacingHud(
           <div class="leaderboard-header">
             <div>
               <span class="retro-text highlight" style="font-size:10px;">LEADERBOARD</span>
-              <p class="retro-text cyan-text" style="font-size:6px; margin-top:2px;">LIVE FLASHMOB RANKINGS</p>
+              <p id="leaderboard-status-tag" class="retro-text cyan-text" style="font-size:6px; margin-top:2px;">● LIVE FLASHMOB RANKINGS</p>
             </div>
             <button id="close-leaderboard-btn" class="retro-btn btn-secondary" style="width:auto; padding:4px 8px; font-size:8px;">
               CLOSE ✕
@@ -144,6 +144,7 @@ export function renderRacingHud(
   const lbModalEl = container.querySelector('#leaderboard-modal') as HTMLDivElement | null;
   const closeLbBtn = container.querySelector('#close-leaderboard-btn') as HTMLButtonElement | null;
   const liveBoardContent = container.querySelector('#live-board-content') as HTMLDivElement | null;
+  const lbStatusTag = container.querySelector('#leaderboard-status-tag') as HTMLElement | null;
 
   // Setup Minimap Base Canvas
   const miniCanvas = container.querySelector('#minimap-canvas') as HTMLCanvasElement | null;
@@ -250,7 +251,7 @@ export function renderRacingHud(
         try {
           const snap = await api.getLeaderboard();
           if (snap.me && rankEl) {
-            rankEl.textContent = `#${snap.me.rank}`;
+            rankEl.textContent = `#${snap.me.rank}${snap.isStale ? '*' : ''}`;
           }
         } catch {
           // Ignore
@@ -265,11 +266,21 @@ export function renderRacingHud(
       const snap = await api.getLeaderboard();
 
       if (snap.me) {
-        if (rankEl) rankEl.textContent = `#${snap.me.rank}`;
+        if (rankEl) rankEl.textContent = `#${snap.me.rank}${snap.isStale ? '*' : ''}`;
         if (correctEl) correctEl.textContent = snap.me.correct.toString();
       }
 
-      if (liveBoardContent) {
+      if (lbStatusTag) {
+        if (snap.isStale) {
+          lbStatusTag.textContent = '⚠️ [STALE DATA — OFFLINE / RECONNECTING]';
+          lbStatusTag.className = 'retro-text yellow-text';
+        } else {
+          lbStatusTag.textContent = '● LIVE FLASHMOB RANKINGS';
+          lbStatusTag.className = 'retro-text cyan-text';
+        }
+      }
+
+      if (liveBoardContent && snap.top.length > 0) {
         const isMeInTop10 = snap.top.some((r) => r.isMe);
 
         liveBoardContent.innerHTML = `
@@ -320,10 +331,16 @@ export function renderRacingHud(
             </tbody>
           </table>
         `;
+      } else if (liveBoardContent && snap.top.length === 0) {
+        liveBoardContent.innerHTML = `<p class="retro-text yellow-text" style="font-size:8px; text-align:center; padding: 12px 0;">NO RACERS RECORDED YET</p>`;
       }
     } catch {
-      if (liveBoardContent) {
-        liveBoardContent.innerHTML = `<p class="retro-text red-text" style="font-size:8px; text-align:center;">LEADERBOARD OFFLINE</p>`;
+      if (lbStatusTag) {
+        lbStatusTag.textContent = '⚠️ [STALE DATA — OFFLINE]';
+        lbStatusTag.className = 'retro-text yellow-text';
+      }
+      if (liveBoardContent && !liveBoardContent.querySelector('table')) {
+        liveBoardContent.innerHTML = `<p class="retro-text yellow-text" style="font-size:8px; text-align:center; padding: 12px 0;">CONNECTING TO LEADERBOARD...</p>`;
       }
     }
   };

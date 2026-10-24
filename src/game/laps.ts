@@ -21,7 +21,8 @@ export class LapManager {
   private lastLapDrivingTimeMs = 0;
   private lastLapTotalTimeMs = 0;
 
-  private prevPosition: Point2D | null = null;
+  private prevPosition: Point2D = { x: 0, y: 0 };
+  private hasPrevPosition = false;
   private listeners: LapManagerEvents = {};
 
   constructor(gates: CheckpointGate[]) {
@@ -61,7 +62,7 @@ export class LapManager {
     this.currentLap = 0;
     this.currentLapDrivingTimeMs = 0;
     this.currentLapTotalTimeMs = 0;
-    this.prevPosition = null;
+    this.hasPrevPosition = false;
   }
 
   /**
@@ -84,8 +85,10 @@ export class LapManager {
       }
     }
 
-    if (!this.prevPosition) {
-      this.prevPosition = { x: currPos.x, y: currPos.y };
+    if (!this.hasPrevPosition) {
+      this.prevPosition.x = currPos.x;
+      this.prevPosition.y = currPos.y;
+      this.hasPrevPosition = true;
       return;
     }
 
@@ -98,7 +101,8 @@ export class LapManager {
       }
     }
 
-    this.prevPosition = { x: currPos.x, y: currPos.y };
+    this.prevPosition.x = currPos.x;
+    this.prevPosition.y = currPos.y;
   }
 
   private handleGateCrossed(gateIndex: number): void {

@@ -10,6 +10,7 @@ import type {
   LeaderboardRow,
 } from './types';
 import { Storage } from '../util/storage';
+import { networkMonitor } from '../util/network';
 
 interface QueuedLap {
   lapNumber: number;
@@ -45,6 +46,14 @@ export class SupabaseApi implements GameApi {
         autoRefreshToken: true,
         detectSessionInUrl: false,
       },
+    });
+
+    // Auto-flush pending lap queue on network reconnection
+    networkMonitor.subscribe((status) => {
+      if (status === 'reconnected' || status === 'online') {
+        console.log('[SupabaseApi] Network restored — flushing lap queue in order');
+        this.flushLapQueue();
+      }
     });
 
     // Start anonymous auth immediately in background
@@ -100,13 +109,14 @@ export class SupabaseApi implements GameApi {
   }
 
   /**
-   * Invokes an RPC with a Promise.race timeout
+   * Invokes an RPC with a Promise.race timeout (default 10s per Stage 5 requirements)
    */
   private async rpcWithTimeout<T>(
     fnName: string,
     params: Record<string, unknown> = {},
-    timeoutMs = 5000
+    timeoutMs = 10000
   ): Promise<T> {
+    const endReq = networkMonitor.startRequest();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(
@@ -127,6 +137,7 @@ export class SupabaseApi implements GameApi {
       return await Promise.race([rpcCall, timeoutPromise]);
     } finally {
       if (timer) clearTimeout(timer);
+      endReq();
     }
   }
 
@@ -240,7 +251,18 @@ export class SupabaseApi implements GameApi {
   }
 
   /**
-   * Sequential lap queue processor preserving FIFO order
+   * Flush pending lap retry queue immediately
+   */
+  public flushLapQueue(): void {
+    if (!this.isProcessingLapQueue && this.lapQueue.length > 0) {
+      this.processLapQueue().catch((err) => {
+        console.warn('[SupabaseApi] flushLapQueue error:', err);
+      });
+    }
+  }
+
+  /**
+   * Sequential lap queue processor preserving strict FIFO order
    */
   private async processLapQueue(): Promise<void> {
     if (this.isProcessingLapQueue || this.lapQueue.length === 0) {
@@ -250,6 +272,12 @@ export class SupabaseApi implements GameApi {
     this.isProcessingLapQueue = true;
 
     while (this.lapQueue.length > 0) {
+      // If client is currently offline, pause queue processing without dropping laps
+      if (!networkMonitor.isOnline()) {
+        console.log('[SupabaseApi] Client offline — holding pending laps in FIFO queue');
+        break;
+      }
+
       const item = this.lapQueue[0];
       try {
         await this.ensureAuth();
@@ -260,7 +288,7 @@ export class SupabaseApi implements GameApi {
         }>('submit_lap', {
           p_lap_number: item.lapNumber,
           p_lap_time_ms: item.lapTimeMs,
-        }, 5000);
+        }, 10000);
 
         // Success (either accepted or cleanly rejected by server rule)
         this.lapQueue.shift();
@@ -272,12 +300,17 @@ export class SupabaseApi implements GameApi {
       } catch (err: unknown) {
         item.attempts++;
         console.warn(
-          `[SupabaseApi] submit_lap failed (attempt ${item.attempts}/5):`,
+          `[SupabaseApi] submit_lap failed (attempt ${item.attempts}/8):`,
           err
         );
 
-        if (item.attempts >= 5) {
-          // Exceeded max retries for this lap
+        if (!networkMonitor.isOnline()) {
+          // Went offline mid-request: hold item for reconnection
+          break;
+        }
+
+        if (item.attempts >= 8) {
+          // Exceeded max retries for this lap after repeated server failure
           this.lapQueue.shift();
           item.reject(err);
         } else {
@@ -292,11 +325,9 @@ export class SupabaseApi implements GameApi {
   }
 
   /**
-   * Get leaderboard with limited retry and fallback to cached snapshot
+   * Get leaderboard with limited retry and resilient fallback to cached/stale snapshot
    */
   public async getLeaderboard(): Promise<LeaderboardSnapshot> {
-    let lastError: unknown = null;
-
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         await this.ensureAuth();
@@ -304,7 +335,7 @@ export class SupabaseApi implements GameApi {
           top: LeaderboardRow[];
           me: LeaderboardRow | null;
           totalPlayers: number;
-        }>('get_leaderboard', { p_limit: 10 }, 5000);
+        }>('get_leaderboard', { p_limit: 10 }, 8000);
 
         const snapshot: LeaderboardSnapshot = {
           top: (data.top || []).map((r) => ({
@@ -324,24 +355,34 @@ export class SupabaseApi implements GameApi {
               }
             : null,
           totalPlayers: Number(data.totalPlayers || 0),
+          isStale: false,
         };
 
         this.cachedLeaderboard = snapshot;
         return snapshot;
-      } catch (err: unknown) {
-        lastError = err;
+      } catch {
         if (attempt < 2) {
           await new Promise((r) => setTimeout(r, 600));
         }
       }
     }
 
+    // Network slow, offline, or timed out: return cached leaderboard with stale flag
     if (this.cachedLeaderboard) {
-      console.warn('[SupabaseApi] get_leaderboard using cached snapshot after retry failure.');
-      return this.cachedLeaderboard;
+      console.warn('[SupabaseApi] get_leaderboard returning cached snapshot with isStale=true');
+      return {
+        ...this.cachedLeaderboard,
+        isStale: true,
+      };
     }
 
-    throw lastError || new Error('Failed to fetch leaderboard from Supabase.');
+    // Initial load failed while offline: return graceful empty snapshot with isStale=true
+    return {
+      top: [],
+      me: null,
+      totalPlayers: 0,
+      isStale: true,
+    };
   }
 }
 

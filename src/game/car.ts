@@ -123,18 +123,31 @@ export class Car {
     this.y = Math.max(margin, Math.min(WORLD_HEIGHT - margin, this.y));
   }
 
+  // Reusable telemetry object to prevent GC churn in RAF loop
+  private readonly _telemetry: CarTelemetry = {
+    x: 0,
+    y: 0,
+    heading: 0,
+    speed: 0,
+    forwardSpeed: 0,
+    velocity: { x: 0, y: 0 },
+    onRoad: true,
+    progress: 0,
+    nearestTrackIndex: 0,
+  };
+
   public getTelemetry(): CarTelemetry {
     const speed = Math.hypot(this.vx, this.vy);
-    return {
-      x: this.x,
-      y: this.y,
-      heading: this.heading,
-      speed,
-      forwardSpeed: this.forwardSpeed,
-      velocity: { x: this.vx, y: this.vy },
-      onRoad: this.onRoad,
-      progress: this.progress,
-      nearestTrackIndex: this.nearestTrackIndex,
-    };
+    this._telemetry.x = this.x;
+    this._telemetry.y = this.y;
+    this._telemetry.heading = this.heading;
+    this._telemetry.speed = speed;
+    this._telemetry.forwardSpeed = this.forwardSpeed;
+    this._telemetry.velocity.x = this.vx;
+    this._telemetry.velocity.y = this.vy;
+    this._telemetry.onRoad = this.onRoad;
+    this._telemetry.progress = this.progress;
+    this._telemetry.nearestTrackIndex = this.nearestTrackIndex;
+    return this._telemetry;
   }
 }

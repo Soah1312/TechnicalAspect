@@ -9,6 +9,8 @@ import { sounds } from './audio/soundManager';
 import { PitManager } from './game/pit';
 import type { RaceScene } from './game/scenes/RaceScene';
 
+import { networkMonitor } from './util/network';
+
 async function bootstrap() {
   const uiContainer = document.getElementById('ui-container');
   if (!uiContainer) {
@@ -16,15 +18,29 @@ async function bootstrap() {
     return;
   }
 
-  // 1. Initialize Phaser 3 Game
+  const appContainer = document.getElementById('app') || document.body;
+
+  // 1. Dynamic Viewport Height & In-app Browser Address Bar Resilience
+  const updateViewportHeight = () => {
+    const vh = window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', `${vh}px`);
+  };
+  window.addEventListener('resize', updateViewportHeight, { passive: true });
+  window.addEventListener('orientationchange', updateViewportHeight, { passive: true });
+  updateViewportHeight();
+
+  // 2. Mount Network Status Banner
+  networkMonitor.mountBanner(appContainer);
+
+  // 3. Initialize Phaser 3 Game
   const game = createGame();
 
-  // 2. Initialize UI Screen Manager
+  // 4. Initialize UI Screen Manager
   new ScreenManager(uiContainer, activeApi, game);
 
   const pitManager = new PitManager(activeApi);
 
-  // 3. Audio unlock on first user tap/click anywhere
+  // 5. Audio unlock on first user tap/click anywhere
   const unlockAudio = () => {
     sounds.unlock();
     window.removeEventListener('pointerdown', unlockAudio);
@@ -33,7 +49,41 @@ async function bootstrap() {
   window.addEventListener('pointerdown', unlockAudio, { passive: true });
   window.addEventListener('keydown', unlockAudio, { passive: true });
 
-  // 4. Handle Tab Visibility / Phone Lock Edge Cases
+  // 6. Landscape Orientation Guard & Input Pause
+  const landscapeOverlay = document.createElement('div');
+  landscapeOverlay.id = 'landscape-guard-overlay';
+  landscapeOverlay.className = 'orientation-landscape-overlay';
+  landscapeOverlay.style.display = 'none';
+  landscapeOverlay.innerHTML = `
+    <div class="landscape-box">
+      <div class="rotate-phone-icon">📱↻</div>
+      <div class="retro-text highlight" style="font-size:11px; margin-bottom:8px;">ROTATE TO PORTRAIT</div>
+      <p class="retro-text cyan-text" style="font-size:7px; line-height:1.5;">
+        CRESCENDO FUEL RUSH IS DESIGNED EXCLUSIVELY FOR VERTICAL PORTRAIT DRIVING!
+      </p>
+    </div>
+  `;
+  appContainer.appendChild(landscapeOverlay);
+
+  const checkOrientation = () => {
+    const isLandscape = window.innerWidth > window.innerHeight && window.innerHeight < 550;
+    landscapeOverlay.style.display = isLandscape ? 'flex' : 'none';
+    const raceScene = game.scene.getScene('RaceScene') as RaceScene | undefined;
+    if (raceScene) {
+      if (isLandscape) {
+        raceScene.isRaceActive = false;
+        sounds.stopEngine();
+      } else if (stateMachine.getState() === 'RACING') {
+        raceScene.isRaceActive = true;
+        sounds.startEngine();
+      }
+    }
+  };
+  window.addEventListener('resize', checkOrientation, { passive: true });
+  window.addEventListener('orientationchange', checkOrientation, { passive: true });
+  checkOrientation();
+
+  // 7. Handle Tab Visibility / Phone Lock Edge Cases
   document.addEventListener('visibilitychange', () => {
     const isHidden = document.hidden;
     const raceScene = game.scene.getScene('RaceScene') as RaceScene | undefined;
@@ -53,7 +103,7 @@ async function bootstrap() {
     }
   });
 
-  // 5. Initial Loading State
+  // 8. Initial Loading State
   stateMachine.forceState('LOADING', { message: 'INITIALIZING TELEMETRY...' });
 
   try {

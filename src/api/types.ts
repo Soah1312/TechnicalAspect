@@ -49,6 +49,7 @@ export interface LeaderboardSnapshot {
   top: LeaderboardRow[];
   me: LeaderboardRow | null;
   totalPlayers: number;
+  isStale?: boolean;
 }
 
 export interface GameApi {

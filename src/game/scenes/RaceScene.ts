@@ -22,6 +22,16 @@ export class RaceScene extends Phaser.Scene {
   private trackImage: Phaser.GameObjects.Image | null = null;
   public isRaceActive = false;
 
+  // Reusable vectors to eliminate GC pressure in RAF loop
+  private readonly _carPos = { x: 0, y: 0 };
+  private readonly _carVel = { x: 0, y: 0 };
+
+  // Performance telemetry (target: 60 FPS, min: 30 FPS)
+  private fpsHistory: number[] = [];
+  private minRecordedFps = 60;
+  private droppedFrameCount = 0;
+  private lastPerfReportTime = 0;
+
   constructor() {
     super('RaceScene');
   }
@@ -129,9 +139,27 @@ export class RaceScene extends Phaser.Scene {
     return Math.abs(hash) % PALETTE.carColors.length;
   }
 
-  public override update(_time: number, delta: number): void {
-    const dt = Math.min(0.1, delta / 1000); // delta in seconds
-    const deltaMs = delta;
+  public override update(time: number, delta: number): void {
+    // Hard clamp delta to 50ms (20fps equivalent) to prevent tunnelling and extreme jumps in low-power mode
+    const dt = Math.min(0.05, delta / 1000);
+    const deltaMs = Math.min(50, delta);
+
+    // Frame rate telemetry
+    const currentFps = delta > 0 ? 1000 / delta : 60;
+    this.fpsHistory.push(currentFps);
+    if (this.fpsHistory.length > 120) this.fpsHistory.shift();
+    if (currentFps < this.minRecordedFps && currentFps > 0) {
+      this.minRecordedFps = Math.round(currentFps);
+    }
+    if (currentFps < 30) {
+      this.droppedFrameCount++;
+    }
+
+    if (time - this.lastPerfReportTime > 10000) {
+      this.lastPerfReportTime = time;
+      const avg = Math.round(this.fpsHistory.reduce((a, b) => a + b, 0) / (this.fpsHistory.length || 1));
+      console.log(`[Perf] FPS: ${Math.round(currentFps)} | Avg: ${avg} | Min: ${this.minRecordedFps} | Drops (<30): ${this.droppedFrameCount}`);
+    }
 
     const steerInput = this.inputManager.getSteerInput();
     const hasFuel = !this.fuelSystem.isEmpty();
@@ -140,12 +168,13 @@ export class RaceScene extends Phaser.Scene {
     if (this.isRaceActive) {
       this.car.update(dt, steerInput, hasFuel, this.track);
       this.fuelSystem.update(deltaMs, this.car.speed);
-      this.lapManager.update(
-        { x: this.car.x, y: this.car.y },
-        this.car.getTelemetry().velocity,
-        deltaMs,
-        true
-      );
+
+      // Reused coordinate vectors (0 heap allocations)
+      this._carPos.x = this.car.x;
+      this._carPos.y = this.car.y;
+      this._carVel.x = this.car.vx;
+      this._carVel.y = this.car.vy;
+      this.lapManager.update(this._carPos, this._carVel, deltaMs, true);
 
       // Sound modulation
       const speedRatio = this.car.forwardSpeed / Car.MAX_SPEED;
@@ -176,6 +205,23 @@ export class RaceScene extends Phaser.Scene {
 
     this.cameras.main.scrollX = Phaser.Math.Linear(this.cameras.main.scrollX, destScrollX, 0.1);
     this.cameras.main.scrollY = Phaser.Math.Linear(this.cameras.main.scrollY, destScrollY, 0.1);
+  }
+
+  public getPerformanceStats(): {
+    currentFps: number;
+    avgFps: number;
+    minFps: number;
+    droppedFrames: number;
+  } {
+    const avg = this.fpsHistory.length
+      ? Math.round(this.fpsHistory.reduce((a, b) => a + b, 0) / this.fpsHistory.length)
+      : 60;
+    return {
+      currentFps: Math.round(this.fpsHistory[this.fpsHistory.length - 1] || 60),
+      avgFps: avg,
+      minFps: this.minRecordedFps,
+      droppedFrames: this.droppedFrameCount,
+    };
   }
 
   public destroy(): void {
