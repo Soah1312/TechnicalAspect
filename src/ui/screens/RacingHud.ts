@@ -1,6 +1,5 @@
 import type { GameApi, GameConfig } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
-import { serverNow } from '../../util/clock';
 import { sounds } from '../../audio/soundManager';
 import { DEBUG_CONFIG } from '../../config/constants';
 import type { RaceScene } from '../../game/scenes/RaceScene';
@@ -345,50 +344,15 @@ export function renderRacingHud(
     }
   };
 
+  const sessionStartTime = Date.now();
+
   // Main HUD Animation / Loop
   const updateLoop = () => {
-    const nowServer = serverNow();
-    const raceRemainingMs = config.endAt - nowServer;
-
-    // Check race hard stop
-    if (raceRemainingMs <= 0) {
-      if (raceScene) {
-        raceScene.isRaceActive = false;
-        raceScene.car.stop();
-      }
-      sounds.stopEngine();
-      sounds.playRaceEnd();
-
-      if (leaderboardPollTimer !== null) {
-        window.clearTimeout(leaderboardPollTimer);
-        leaderboardPollTimer = null;
-      }
-      if (backgroundPollTimer !== null) {
-        window.clearInterval(backgroundPollTimer);
-        backgroundPollTimer = null;
-      }
-
-      const finishBanner = document.createElement('div');
-      finishBanner.className = 'go-cue-banner';
-      finishBanner.style.borderColor = 'var(--accent-yellow)';
-      finishBanner.style.color = 'var(--accent-yellow)';
-      finishBanner.textContent = '🏁 CHECKERED FLAG — RACE OVER! 🏁';
-      container.appendChild(finishBanner);
-
-      window.setTimeout(() => {
-        stateMachine.transition('ENDED', {
-          api,
-          config,
-          laps: raceScene?.lapManager.getLapCount() || 0,
-        });
-      }, 2000);
-      return;
-    }
-
+    // Race remains continuously open: display elapsed session time
     if (raceTimeEl) {
-      const totalSec = Math.ceil(raceRemainingMs / 1000);
-      const mins = Math.floor(totalSec / 60);
-      const secs = totalSec % 60;
+      const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+      const mins = Math.floor(elapsedSec / 60);
+      const secs = elapsedSec % 60;
       raceTimeEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 

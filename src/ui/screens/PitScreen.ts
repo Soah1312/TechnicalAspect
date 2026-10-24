@@ -2,7 +2,6 @@ import type { GameApi, GameConfig, Question } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { sounds } from '../../audio/soundManager';
 import { Vibration } from '../../util/vibration';
-import { serverNow } from '../../util/clock';
 import { PitManager } from '../../game/pit';
 import type { RaceScene } from '../../game/scenes/RaceScene';
 
@@ -83,27 +82,7 @@ export function renderPitScreen(
   const qTimerBarEl = container.querySelector('#q-timer-bar') as HTMLDivElement | null;
   const statusBanner = container.querySelector('#q-status-banner') as HTMLDivElement | null;
 
-  // Monitor race end time while answering
-  raceCheckInterval = window.setInterval(() => {
-    if (serverNow() >= config.endAt) {
-      cleanup();
-      pitManager.markExitedPit();
-      if (raceScene) {
-        raceScene.isRaceActive = false;
-        raceScene.car.stop();
-      }
-      sounds.stopEngine();
-      sounds.playRaceEnd();
-      window.setTimeout(() => {
-        stateMachine.transition('ENDED', {
-          api,
-          config,
-          laps: raceScene?.lapManager.getLapCount() || 0,
-        });
-      }, 2000);
-    }
-  }, 250);
-
+  // Race is continuously open: pit stops remain active without interruption
   const loadQuestion = async () => {
     isSubmitting = false;
     isLockedOut = false;

@@ -96,7 +96,8 @@ export function renderJoinScreen(
       if (!tutorialSeen) {
         stateMachine.transition('HOW_TO_PLAY', { player, config });
       } else {
-        stateMachine.transition('LOBBY', { player, config });
+        // Race is open: launch directly into countdown
+        stateMachine.transition('COUNTDOWN', { player, config });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'FAILED TO JOIN RACE';

@@ -18,8 +18,8 @@ export function renderLobbyScreen(
   config: GameConfig,
   player: PlayerState | null
 ): () => void {
-  // If race is already open, skip straight to countdown!
-  if (serverNow() >= config.startAt) {
+  // Race is continuously open: skip straight to countdown!
+  if (config.isOpen) {
     stateMachine.transition('COUNTDOWN', { config, player });
     return () => {};
   }

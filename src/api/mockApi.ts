@@ -51,14 +51,10 @@ export class MockApi implements GameApi {
   constructor(simulateDelay = true) {
     this.simulateDelay = simulateDelay;
     const now = Date.now();
-    const startDelayMs = simulateDelay ? 10000 : -10000; // In test mode, start immediately
-    const raceDurationMs = DEBUG_CONFIG.endInSeconds
-      ? DEBUG_CONFIG.endInSeconds * 1000
-      : 3 * 60 * 1000; // 3 minutes default
 
     this.config = {
-      startAt: now + startDelayMs,
-      endAt: now + startDelayMs + raceDurationMs,
+      startAt: now - 60000,
+      endAt: now + 3153600000000, // Always active
       isOpen: !DEBUG_CONFIG.forceClosed,
       tankMaxMs: DEFAULT_CONFIG.tankMaxMs,
       initialFuelMs: DEFAULT_CONFIG.initialFuelMs,
@@ -294,12 +290,12 @@ export class MockApi implements GameApi {
     await this.delay();
     const now = Date.now();
 
-    // (e) Race window open check
-    if (now < this.config.startAt || now > this.config.endAt || !this.config.isOpen) {
+    // (e) Race open check
+    if (!this.config.isOpen) {
       return {
         accepted: false,
         laps: this.player?.laps ?? 0,
-        reason: 'Race window is closed.',
+        reason: 'Race is closed or paused.',
       };
     }
 

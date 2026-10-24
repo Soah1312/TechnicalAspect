@@ -128,7 +128,7 @@ export function renderHowToPlayScreen(
   const handleFinish = () => {
     sounds.unlock();
     Storage.setTutorialSeen();
-    stateMachine.transition('LOBBY', context);
+    stateMachine.transition('COUNTDOWN', context);
   };
 
   updateCardView();

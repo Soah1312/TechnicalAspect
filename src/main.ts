@@ -3,7 +3,7 @@ import { createGame } from './game/game';
 import { ScreenManager } from './ui/screenManager';
 import { activeApi } from './api';
 import { stateMachine } from './game/stateMachine';
-import { clock, serverNow } from './util/clock';
+import { clock } from './util/clock';
 import { Storage } from './util/storage';
 import { sounds } from './audio/soundManager';
 import { PitManager } from './game/pit';
@@ -134,32 +134,23 @@ async function bootstrap() {
       raceScene.updateCarTexture(storedPlayer.playerId);
     }
 
-    const now = serverNow();
-
-    // Check race timing
-    if (now >= config.endAt) {
-      stateMachine.forceState('ENDED', { api: activeApi, config });
-    } else if (now < config.startAt) {
-      stateMachine.forceState('LOBBY', { config, player: storedPlayer });
+    // Race is continuously open: resume directly into RACING or PIT
+    if (pitManager.isMarkedInPit()) {
+      console.log('[Anti-Abuse] Refreshed during question. Resuming with empty tank in PIT.');
+      raceScene?.fuelSystem.drainAll();
+      stateMachine.forceState('PIT', {
+        api: activeApi,
+        config,
+        raceScene,
+        reason: 'dry',
+      });
     } else {
-      // Check Anti-Refresh Abuse: did player refresh mid-question?
-      if (pitManager.isMarkedInPit()) {
-        console.log('[Anti-Abuse] Refreshed during question. Resuming with empty tank in PIT.');
-        raceScene?.fuelSystem.drainAll();
-        stateMachine.forceState('PIT', {
-          api: activeApi,
-          config,
-          raceScene,
-          reason: 'dry',
-        });
-      } else {
-        // Normal resume into active race
-        stateMachine.forceState('RACING', {
-          api: activeApi,
-          config,
-          raceScene,
-        });
-      }
+      // Normal resume directly into active race
+      stateMachine.forceState('RACING', {
+        api: activeApi,
+        config,
+        raceScene,
+      });
     }
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'FAILED TO INITIALIZE TELEMETRY';
