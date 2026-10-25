@@ -3,6 +3,10 @@
 -- Run this in your Supabase SQL Editor
 -- ============================================================
 
+ALTER TABLE public.issued_questions ADD COLUMN IF NOT EXISTS shuffled_options jsonb;
+ALTER TABLE public.issued_questions ADD COLUMN IF NOT EXISTS chosen_index smallint;
+ALTER TABLE public.issued_questions ADD COLUMN IF NOT EXISTS was_correct boolean;
+
 CREATE OR REPLACE FUNCTION public.request_question()
 RETURNS json
 LANGUAGE plpgsql
@@ -48,29 +52,26 @@ BEGIN
 
   IF FOUND THEN
     -- Check if previous question has timed out
-    IF now() > (v_issued.issued_at + ((v_cfg.question_time_ms / 1000.0) * interval '1 second')) THEN
+    IF (now() - v_issued.issued_at) > (v_cfg.question_time_ms * interval '1 millisecond') THEN
       -- Mark timed out question answered cleanly
       UPDATE public.issued_questions
-      SET answered_at = now()
-      WHERE player_id = v_player_id AND question_id = v_issued.question_id;
+      SET answered_at = now(), was_correct = false
+      WHERE id = v_issued.id;
 
       -- Apply wrong answer lockout penalty to player
       UPDATE public.players
       SET
         wrong_answers = wrong_answers + 1,
-        locked_until = now() + ((v_cfg.wrong_lockout_ms / 1000.0) * interval '1 second')
+        locked_until = now() + (v_cfg.wrong_lockout_ms * interval '1 millisecond'),
+        current_question_id = NULL
       WHERE id = v_player_id;
     ELSE
       -- Still active and within question time limit: re-return existing question
       SELECT * INTO v_q FROM public.questions WHERE id = v_issued.question_id;
 
-      -- Reconstruct shuffled options if column exists or fall back to order reconstruction
-      IF v_issued.shuffled_options IS NOT NULL THEN
-        v_shuffled_options := v_issued.shuffled_options;
-      ELSE
-        SELECT jsonb_agg(v_q.options->(val::int) ORDER BY ord) INTO v_shuffled_options
-        FROM jsonb_array_elements_text(v_issued.option_order) WITH ORDINALITY AS t(val, ord);
-      END IF;
+      -- Reconstruct shuffled options preserving order using explicit (val::int) cast
+      SELECT jsonb_agg(v_q.options->(val::int) ORDER BY ord) INTO v_shuffled_options 
+      FROM jsonb_array_elements_text(v_issued.option_order) WITH ORDINALITY AS t(val, ord);
 
       RETURN json_build_object(
         'questionId', v_q.id,
@@ -106,17 +107,14 @@ BEGIN
 
   SELECT * INTO v_q FROM public.questions WHERE id = v_selected_qid;
 
-  -- Shuffle options 0, 1, 2, 3 safely by casting index to integer
-  WITH shuffled AS (
-    SELECT (elem - 1)::int as orig_idx
-    FROM jsonb_array_elements_text('["1","2","3","4"]'::jsonb) WITH ORDINALITY arr(val, elem)
-    ORDER BY random()
-  )
-  SELECT
-    jsonb_agg(orig_idx),
-    jsonb_agg(v_q.options->orig_idx)
-  INTO v_order, v_shuffled_options
-  FROM shuffled;
+  -- Shuffle options [0, 1, 2, 3]
+  SELECT jsonb_agg(idx) INTO v_order FROM (
+    SELECT idx FROM unnest(ARRAY[0, 1, 2, 3]) AS idx ORDER BY random()
+  ) t;
+
+  -- Build shuffled options array preserving randomized order with safe integer casting
+  SELECT jsonb_agg(v_q.options->(val::int) ORDER BY ord) INTO v_shuffled_options 
+  FROM jsonb_array_elements_text(v_order) WITH ORDINALITY AS t(val, ord);
 
   -- Record issued question
   INSERT INTO public.issued_questions (
@@ -138,3 +136,5 @@ BEGIN
   );
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.request_question() TO anon, authenticated;
