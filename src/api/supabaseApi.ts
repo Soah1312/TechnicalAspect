@@ -156,7 +156,6 @@ export class SupabaseApi implements GameApi {
       tankMaxMs: Number(data.tankMaxMs),
       initialFuelMs: Number(data.initialFuelMs),
       fuelPerCorrectMs: Number(data.fuelPerCorrectMs),
-      pitBelowFraction: Number(data.pitBelowFraction),
       questionTimeMs: Number(data.questionTimeMs),
       wrongLockoutMs: Number(data.wrongLockoutMs),
       minLapMs: Number(data.minLapMs),

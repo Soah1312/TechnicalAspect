@@ -14,12 +14,11 @@ export interface GameConfig {
   tankMaxMs: number; // full tank, ms of driving
   initialFuelMs: number; // fuel at join
   fuelPerCorrectMs: number;
-  pitBelowFraction: number; // 0.5
   questionTimeMs: number;
   wrongLockoutMs: number;
   minLapMs: number; // fastest physically possible lap (driving time)
 
-  // V2 Contract Additions
+  // V2/V3 Contract Additions
   speedStep?: number;
   speedCap?: number;
   lapMinFactor?: number;
@@ -43,6 +42,8 @@ export interface Question {
   text: string;
   options: string[];
   difficulty?: 1 | 2 | 3;
+  status?: string;
+  waitMs?: number;
 } // never includes the answer
 
 export interface AnswerResult {

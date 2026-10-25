@@ -84,10 +84,14 @@ export function validateTrackCenterline(points: TrackPoint[]): TrackValidationRe
   // Non-adjacent points must not come within road width (2 * ROAD_HALF_WIDTH)
   let minSeparationSq = Infinity;
   const minRequiredDistance = ROAD_HALF_WIDTH * 2; // 76 px
-  const skipWindow = 20; // ignore 20 points along curve (~300 px along path)
+  const skipWindow = 28; // ignore 28 points along curve (~550 px along path)
 
   for (let i = 0; i < N; i += 4) {
-    for (let j = i + skipWindow; j < N - skipWindow; j += 4) {
+    for (let j = i + skipWindow; j < N; j += 4) {
+      const diff = Math.abs(i - j);
+      const loopDist = Math.min(diff, N - diff);
+      if (loopDist < skipWindow) continue;
+
       const dSq = distToSegmentSquared(
         points[i].pos,
         points[j].pos,

@@ -25,83 +25,48 @@ export function renderRacingHud(
   let backgroundPollTimer: number | null = null;
   let currentScope: Scope = 'ALL';
   let prevLap = 0;
+  let currentMyRank: number | null = null;
 
   // Track calibration metrics
   const trackLength = raceScene?.track.totalLength || 11200;
   const theoreticalBestLapMs = Math.round((trackLength / Car.MAX_SPEED) * 1000);
   const recommendedMinLapMs = Math.round(theoreticalBestLapMs * 0.8);
 
-  const savedPlayer = Storage.getPlayer();
-  const driverTag = savedPlayer
-    ? `${savedPlayer.name} · ${savedPlayer.branch || 'COMPS'} · ${savedPlayer.year || 1} yr`
-    : 'DRIVER';
-
   container.innerHTML = `
     <div class="screen-layer transparent-bg" style="pointer-events:none;">
       <div class="scanlines"></div>
 
-      <!-- Retro Top Arcade HUD -->
+      <!-- Part 2: Compact Single-Row Top Strip (max 44px, <= 8% height) -->
       <div class="hud-topbar">
-        <div class="hud-group" style="min-width: 40px;">
-          <span class="hud-label">LAPS</span>
-          <span id="hud-laps" class="hud-value">0</span>
+        <!-- 1. Fuel bar with seconds remaining inside (~55% width) -->
+        <div class="hud-fuel-gauge">
+          <div id="hud-fuel-fill" class="fuel-bar-fill" style="width: 100%;"></div>
+          <span id="hud-fuel-sec" class="fuel-bar-sec">10s</span>
         </div>
 
-        <div class="hud-group" style="min-width: 40px;">
-          <span class="hud-label">CORRECT</span>
-          <span id="hud-correct" class="hud-value green-text">0</span>
-        </div>
+        <!-- 2. Laps Pill (L3) -->
+        <span id="hud-laps" class="hud-pill yellow-text">L0</span>
 
-        <div class="hud-group fuel-container" style="flex: 1; max-width: 95px;">
-          <div style="display:flex; justify-content:space-between; font-size:7px;">
-            <span class="hud-label">FUEL</span>
-            <span id="hud-fuel-sec" class="hud-value" style="font-size:7px;">30s</span>
-          </div>
-          <div class="fuel-gauge-frame">
-            <div id="hud-fuel-fill" class="fuel-gauge-fill" style="width: 100%;"></div>
-          </div>
-        </div>
+        <!-- 3. Correct Answers Pill (✓7) -->
+        <span id="hud-correct" class="hud-pill green-text">✓0</span>
 
-        <!-- Dynamic Speed Multiplier Chip -->
-        <div class="hud-group" style="min-width: 42px;">
-          <span class="hud-label">SPEED</span>
-          <span id="hud-speed-mult" class="hud-value yellow-text" style="font-size:9px;">1.00x</span>
-        </div>
-
-        <!-- Tappable Rank Chip (Always reflects global ALL rank) -->
-        <button id="hud-rank-btn" class="sound-toggle-btn" style="min-width: 44px; padding:3px 4px; border-color:var(--cyan); cursor:pointer;">
-          <span class="hud-label" style="display:block; font-size:6px;">RANK</span>
-          <span id="hud-rank" class="hud-value cyan-text" style="font-size:10px;">#--</span>
-        </button>
-
-        <div class="hud-group" style="min-width: 42px;">
-          <span class="hud-label">TIME</span>
-          <span id="hud-race-time" class="hud-value">--:--</span>
-        </div>
-
-        <button id="hud-mute-btn" class="sound-toggle-btn" style="padding:4px 6px; font-size:8px;">
-          ${sounds.isMuted() ? '🔇' : '🔊'}
+        <!-- 4. Rank Pill Button (#8, tappable to open leaderboard) -->
+        <button id="hud-rank-btn" class="hud-pill-btn cyan-text" aria-label="Open Leaderboard">
+          <span id="hud-rank">#--</span>
         </button>
       </div>
 
-      <!-- Driver Tag Bar -->
-      <div style="position: absolute; top: 38px; left: 10px; font-family: var(--font-retro); font-size: 7px; color: var(--cyan); text-shadow: 1px 1px 0 #000; pointer-events: none; z-index: 25; background: rgba(0,0,0,0.6); padding: 2px 5px; border-left: 2px solid var(--cyan);">
-        ${driverTag}
-      </div>
-
-      <!-- HUD Toast Notification Container -->
+      <!-- HUD Toast Notification Container (single slot just below top strip) -->
       <div id="hud-toast-container" style="pointer-events:none;"></div>
 
-      <!-- Minimap Frame (Top Right) -->
-      <div class="minimap-frame" id="minimap-container">
-        <canvas id="minimap-canvas" width="80" height="80"></canvas>
+      <!-- First-Run Steering Hint (fades on first steer) -->
+      <div id="first-run-hint" class="first-run-hint">
+        HOLD LEFT / RIGHT
       </div>
 
-      <!-- Pulsing PIT Button (Appears when fuel <= 50%) -->
-      <div style="position: absolute; top: 138px; right: 10px; pointer-events: auto; z-index: 24;">
-        <button id="hud-pit-btn" class="pit-btn" style="display: none;">
-          PIT STOP
-        </button>
+      <!-- Minimap Frame (Bottom-Right corner, 56x56, 60% opacity) -->
+      <div class="minimap-frame" id="minimap-container">
+        <canvas id="minimap-canvas" width="56" height="56"></canvas>
       </div>
 
       <!-- Calibration Helper Bar (if ?debug=1) -->
@@ -135,9 +100,15 @@ export function renderRacingHud(
               <span class="retro-text highlight" style="font-size:10px;">LEADERBOARD</span>
               <p id="leaderboard-status-tag" class="retro-text cyan-text" style="font-size:6px; margin-top:2px;">● LIVE FLASHMOB RANKINGS</p>
             </div>
-            <button id="close-leaderboard-btn" class="retro-btn btn-secondary" style="width:auto; padding:4px 8px; font-size:8px;">
-              CLOSE ✕
-            </button>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <!-- Mute Button moved inside Leaderboard Header (Part 2) -->
+              <button id="hud-mute-btn" class="sound-toggle-btn" style="padding:4px 6px; font-size:8px;">
+                ${sounds.isMuted() ? '🔇' : '🔊'}
+              </button>
+              <button id="close-leaderboard-btn" class="retro-btn btn-secondary" style="width:auto; padding:4px 8px; font-size:8px;">
+                CLOSE ✕
+              </button>
+            </div>
           </div>
 
           <!-- Scope Selection Tabs -->
@@ -165,17 +136,17 @@ export function renderRacingHud(
 
   const fuelFillEl = container.querySelector('#hud-fuel-fill') as HTMLDivElement | null;
   const fuelSecEl = container.querySelector('#hud-fuel-sec') as HTMLSpanElement | null;
-  const raceTimeEl = container.querySelector('#hud-race-time') as HTMLSpanElement | null;
   const lapsEl = container.querySelector('#hud-laps') as HTMLSpanElement | null;
   const correctEl = container.querySelector('#hud-correct') as HTMLSpanElement | null;
   const rankEl = container.querySelector('#hud-rank') as HTMLSpanElement | null;
   const rankBtn = container.querySelector('#hud-rank-btn') as HTMLButtonElement | null;
-  const pitBtn = container.querySelector('#hud-pit-btn') as HTMLButtonElement | null;
+
   const muteBtn = container.querySelector('#hud-mute-btn') as HTMLButtonElement | null;
   const steerLeftBtn = container.querySelector('#steer-left-btn') as HTMLElement | null;
   const steerRightBtn = container.querySelector('#steer-right-btn') as HTMLElement | null;
   const debugLastLapEl = container.querySelector('#debug-last-lap') as HTMLDivElement | null;
-  const speedMultEl = container.querySelector('#hud-speed-mult') as HTMLSpanElement | null;
+  let firstRunHintEl = container.querySelector('#first-run-hint') as HTMLDivElement | null;
+  const minimapContainer = container.querySelector('#minimap-container') as HTMLDivElement | null;
 
   const lbModalEl = container.querySelector('#leaderboard-modal') as HTMLDivElement | null;
   const closeLbBtn = container.querySelector('#close-leaderboard-btn') as HTMLButtonElement | null;
@@ -183,23 +154,41 @@ export function renderRacingHud(
   const lbStatusTag = container.querySelector('#leaderboard-status-tag') as HTMLElement | null;
   const toastContainer = container.querySelector('#hud-toast-container') as HTMLDivElement | null;
 
-  // Toast Banner Display Helper
-  const showHudToast = (msg: string) => {
-    if (!toastContainer) return;
+  // Part 2: Toast Queue (single slot below top strip, 1.2s duration)
+  const toastQueue: string[] = [];
+  let isToastActive = false;
+
+  const processToastQueue = () => {
+    if (isToastActive || toastQueue.length === 0 || !toastContainer) return;
+    isToastActive = true;
+    const msg = toastQueue.shift()!;
     toastContainer.innerHTML = `<div class="hud-toast-banner">${msg}</div>`;
     window.setTimeout(() => {
       if (toastContainer) toastContainer.innerHTML = '';
-    }, 2400);
+      isToastActive = false;
+      processToastQueue();
+    }, 1200);
+  };
+
+  const showHudToast = (msg: string) => {
+    toastQueue.push(msg);
+    processToastQueue();
   };
   (window as any).__showHudToast = showHudToast;
 
-  // Setup Minimap Base Canvas
+  // Setup Minimap Base Canvas (56x56 px)
   const miniCanvas = container.querySelector('#minimap-canvas') as HTMLCanvasElement | null;
   const miniCtx = miniCanvas?.getContext('2d');
   let baseMinimapImg: HTMLCanvasElement | null = null;
   if (raceScene) {
     baseMinimapImg = raceScene.track.renderMinimap();
   }
+  (window as any).__updateHudMinimap = (newTrack: any) => {
+    if (newTrack?.renderMinimap) {
+      baseMinimapImg = newTrack.renderMinimap();
+    }
+  };
+
 
   // Bind Multi-Touch Thumb Steering Buttons
   if (raceScene && steerLeftBtn && steerRightBtn) {
@@ -215,19 +204,7 @@ export function renderRacingHud(
     }
   });
 
-  // Voluntary Pit Stop handler
-  pitBtn?.addEventListener('click', () => {
-    sounds.unlock();
-    sounds.stopEngine();
-    stateMachine.transition('PIT', {
-      api,
-      config,
-      raceScene,
-      reason: 'voluntary',
-    });
-  });
-
-  // Wire auto pit stop on empty tank
+  // Wire auto pit stop on empty tank and low-fuel audio
   if (raceScene) {
     raceScene.fuelSystem.setListeners({
       onEmpty: () => {
@@ -244,6 +221,13 @@ export function renderRacingHud(
       },
     });
   }
+
+  // Hide minimap while question overlay is active
+  const unsubStateMachine = stateMachine.subscribe((state) => {
+    if (minimapContainer) {
+      minimapContainer.style.display = state === 'PIT' ? 'none' : 'block';
+    }
+  });
 
   // Leaderboard Modal Open/Close Handlers
   rankBtn?.addEventListener('click', () => {
@@ -295,215 +279,199 @@ export function renderRacingHud(
   const closeLeaderboard = () => {
     isLeaderboardOpen = false;
     if (lbModalEl) lbModalEl.style.display = 'none';
+    stopLeaderboardActivePolling();
+  };
+
+  const startLeaderboardActivePolling = () => {
+    stopLeaderboardActivePolling();
+    leaderboardPollTimer = window.setTimeout(async () => {
+      if (isLeaderboardOpen) {
+        await fetchLeaderboardData();
+        startLeaderboardActivePolling();
+      }
+    }, 5000);
+  };
+
+  const stopLeaderboardActivePolling = () => {
     if (leaderboardPollTimer !== null) {
       window.clearTimeout(leaderboardPollTimer);
       leaderboardPollTimer = null;
     }
   };
 
-  // Poll leaderboard every 4s (+ 0-1s jitter) while panel is open
-  const startLeaderboardActivePolling = () => {
-    if (leaderboardPollTimer !== null) window.clearTimeout(leaderboardPollTimer);
-    if (!isLeaderboardOpen) return;
-
-    const jitter = Math.floor(Math.random() * 1000);
-    leaderboardPollTimer = window.setTimeout(async () => {
-      if (isLeaderboardOpen) {
-        await fetchLeaderboardData();
-        startLeaderboardActivePolling();
-      }
-    }, 4000 + jitter);
-  };
-
-  // Background polling every 8s to keep HUD rank chip updated with global ALL scope
-  const startBackgroundPolling = () => {
-    backgroundPollTimer = window.setInterval(async () => {
-      if (!isLeaderboardOpen) {
-        try {
-          const snap = await api.getLeaderboard('ALL');
-          if (snap.me && rankEl) {
-            rankEl.textContent = `#${snap.me.rank}${snap.isStale ? '*' : ''}`;
-          }
-        } catch {
-          // Ignore
-        }
-      }
-    }, 8000);
-  };
-  startBackgroundPolling();
-
-  const fetchLeaderboardData = async () => {
+  // Poll Global ALL rank in background every 15s to keep the #rank chip fresh
+  const fetchGlobalRankOnly = async () => {
     try {
-      const snap = await api.getLeaderboard(currentScope);
-
-      if (snap.me) {
-        // Only update HUD rank chip if viewing ALL scope
-        if (currentScope === 'ALL' && rankEl) {
-          rankEl.textContent = `#${snap.me.rank}${snap.isStale ? '*' : ''}`;
+      const snap = await api.getLeaderboard('ALL');
+      if (snap.me?.rank !== undefined) {
+        currentMyRank = snap.me.rank;
+        if (rankEl) {
+          rankEl.textContent = `#${snap.me.rank || '--'}`;
         }
-        if (correctEl) correctEl.textContent = snap.me.correct.toString();
       }
+    } catch (err) {
+      console.warn('[HUD] Background global rank poll deferred:', err);
+    }
+  };
+  fetchGlobalRankOnly();
+  backgroundPollTimer = window.setInterval(fetchGlobalRankOnly, 15000);
 
+  // Render Leaderboard Rows with Resilient Offline Stale UI
+  const fetchLeaderboardData = async () => {
+    if (!liveBoardContent) return;
+
+    try {
+      const snapshot = await api.getLeaderboard(currentScope);
       if (lbStatusTag) {
-        if (snap.isStale) {
-          lbStatusTag.textContent = '⚠️ [STALE DATA — OFFLINE / RECONNECTING]';
-          lbStatusTag.className = 'retro-text yellow-text';
+        if (snapshot.isStale) {
+          lbStatusTag.innerHTML = `⚠️ <span style="color:var(--wrong-red);">OFFLINE (CACHED DATA)</span>`;
         } else {
-          const scopeLabel = currentScope === 'BRANCH' ? `● ${savedPlayer?.branch || 'BRANCH'} RANKINGS` : currentScope === 'YEAR' ? `● YEAR ${savedPlayer?.year || 1} RANKINGS` : '● ALL-STAR RANKINGS';
-          lbStatusTag.textContent = scopeLabel;
+          lbStatusTag.innerHTML = `● LIVE FLASHMOB RANKINGS`;
           lbStatusTag.className = 'retro-text cyan-text';
         }
       }
 
-      if (liveBoardContent && snap.top.length > 0) {
-        const isMeInTop10 = snap.top.some((r) => r.isMe);
-
-        liveBoardContent.innerHTML = `
-          <table class="leaderboard-table" style="font-size:8px;">
-            <thead>
-              <tr>
-                <th style="width:16%;">RNK</th>
-                <th style="width:48%;">NAME</th>
-                <th style="width:18%; text-align:right;">LAPS</th>
-                <th style="width:18%; text-align:right;">COR</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${snap.top
-                .map(
-                  (row) => `
-                <tr class="${row.isMe ? 'my-row' : ''}">
-                  <td>#${row.rank}</td>
-                  <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:115px;">
-                    ${row.name} <span style="font-size:6px; color:var(--cyan); opacity:0.85;">${row.branch || ''} Y${row.year || ''}</span>
-                  </td>
-                  <td style="text-align:right;">${row.laps}</td>
-                  <td style="text-align:right;">${row.correct}</td>
-                </tr>
-              `
-                )
-                .join('')}
-
-              ${
-                !isMeInTop10 && snap.me
-                  ? `
-                <tr>
-                  <td colspan="4" style="text-align:center; padding: 4px; color:var(--cyan); border-top:1px dashed #444;">
-                    ••• YOUR POSITION •••
-                  </td>
-                </tr>
-                <tr class="my-row">
-                  <td>#${snap.me.rank}</td>
-                  <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:115px;">
-                    ${snap.me.name} <span style="font-size:6px; color:var(--cyan); opacity:0.85;">${snap.me.branch || ''} Y${snap.me.year || ''}</span>
-                  </td>
-                  <td style="text-align:right;">${snap.me.laps}</td>
-                  <td style="text-align:right;">${snap.me.correct}</td>
-                </tr>
-              `
-                  : ''
-              }
-            </tbody>
-          </table>
-        `;
-      } else if (liveBoardContent && snap.top.length === 0) {
-        liveBoardContent.innerHTML = `<p class="retro-text yellow-text" style="font-size:8px; text-align:center; padding: 12px 0;">NO RACERS IN THIS CATEGORY YET</p>`;
+      if (snapshot.me?.rank !== undefined) {
+        currentMyRank = snapshot.me.rank;
+        if (rankEl) {
+          rankEl.textContent = `#${snapshot.me.rank || '--'}`;
+        }
       }
+
+      if (snapshot.top.length === 0) {
+        liveBoardContent.innerHTML = `
+          <p class="retro-text" style="font-size:8px; opacity:0.7; padding:12px 0; text-align:center;">
+            NO DRIVERS IN THIS CLASS YET. SET A RECORD!
+          </p>
+        `;
+        return;
+      }
+
+      const rowsHtml = snapshot.top
+        .map((entry) => {
+          const isMe = entry.isMe;
+          const rankColor =
+            entry.rank === 1
+              ? 'var(--accent-yellow)'
+              : entry.rank === 2
+                ? '#e0e0e0'
+                : entry.rank === 3
+                  ? '#cd7f32'
+                  : 'var(--cyan)';
+
+          return `
+            <div class="lb-row ${isMe ? 'is-me' : ''}" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 6px; margin-bottom: 2px; font-size: 8px; font-family: var(--font-retro); background: ${isMe ? 'rgba(0, 229, 255, 0.2)' : 'rgba(0,0,0,0.5)'}; border: 1px solid ${isMe ? 'var(--cyan)' : 'rgba(255,255,255,0.1)'};">
+              <div style="display:flex; gap: 6px; align-items:center;">
+                <span style="color:${rankColor}; min-width: 18px; font-weight:bold;">#${entry.rank}</span>
+                <span style="color:${isMe ? 'var(--accent-yellow)' : '#fff'}; font-weight:bold;">${entry.name}</span>
+                <span class="branch-tag branch-${entry.branch?.toLowerCase() || 'comps'}" style="font-size: 6px; padding: 1px 3px;">${entry.branch || 'COMPS'}</span>
+                <span class="year-badge" style="font-size: 6px; padding: 1px 3px;">Y${entry.year || 1}</span>
+              </div>
+              <div style="display:flex; gap: 8px;">
+                <span class="yellow-text">L${entry.laps}</span>
+                <span class="green-text">✓${entry.correct}</span>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+
+      let myRankFooter = '';
+      if (snapshot.me && snapshot.me.rank > 10) {
+        const stored = Storage.getPlayer();
+        myRankFooter = `
+          <div style="margin-top: 6px; padding: 4px 6px; background: rgba(0, 229, 255, 0.25); border: 1px solid var(--cyan); display:flex; justify-content:space-between; font-size: 8px; font-family: var(--font-retro);">
+            <div style="display:flex; gap: 6px;">
+              <span class="cyan-text font-bold">#${snapshot.me.rank}</span>
+              <span class="yellow-text font-bold">${stored?.name || 'YOU'} (YOU)</span>
+              <span class="branch-tag branch-${stored?.branch?.toLowerCase() || 'comps'}" style="font-size: 6px; padding: 1px 3px;">${stored?.branch || 'COMPS'}</span>
+            </div>
+            <div style="display:flex; gap: 8px;">
+              <span class="yellow-text">L${snapshot.me.laps ?? 0}</span>
+              <span class="green-text">✓${snapshot.me.correct ?? 0}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      liveBoardContent.innerHTML = rowsHtml + myRankFooter;
     } catch {
       if (lbStatusTag) {
-        lbStatusTag.textContent = '⚠️ [STALE DATA — OFFLINE]';
-        lbStatusTag.className = 'retro-text yellow-text';
-      }
-      if (liveBoardContent && !liveBoardContent.querySelector('table')) {
-        liveBoardContent.innerHTML = `<p class="retro-text yellow-text" style="font-size:8px; text-align:center; padding: 12px 0;">CONNECTING TO LEADERBOARD...</p>`;
+        lbStatusTag.innerHTML = `⚠️ <span style="color:var(--wrong-red);">NETWORK OFFLINE</span>`;
       }
     }
   };
 
-  const sessionStartTime = Date.now();
-
-  // Main HUD Animation / Loop
+  // Main UI Frame Animation Loop
   const updateLoop = () => {
-    // Race remains continuously open: display elapsed session time
-    if (raceTimeEl) {
-      const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-      const mins = Math.floor(elapsedSec / 60);
-      const secs = elapsedSec % 60;
-      raceTimeEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-
     if (raceScene) {
-      // 1. Update Laps and Speed Multiplier
       const currentLap = raceScene.lapManager.getLapCount();
-      if (lapsEl) {
-        lapsEl.textContent = currentLap.toString();
-      }
+      const currentCorrect = (window as any).__lastCorrectTotal || 0;
 
-      const spd = speedMult(
-        currentLap + 1,
-        config.speedStep ?? 0.04,
-        config.speedCap ?? 1.5,
-        config.featureFlags?.feature_speed_ramp ?? true
-      );
+      // 1. Update Laps, Correct and Rank
+      if (lapsEl) lapsEl.textContent = `L${currentLap}`;
+      if (correctEl) correctEl.textContent = `✓${currentCorrect}`;
+      if (rankEl && currentMyRank) rankEl.textContent = `#${currentMyRank}`;
 
-      if (speedMultEl) {
-        speedMultEl.textContent = `${spd.toFixed(2)}x`;
-      }
 
-      // Check lap transition for Speed toast
+      // Toast when speed increases on new lap
       if (currentLap !== prevLap) {
         if (currentLap > prevLap && prevLap > 0) {
-          if (spd >= (config.speedCap || 1.5)) {
-            showHudToast(`⚡ MAX SPEED! ${spd.toFixed(2)}x`);
-          } else {
-            showHudToast(`⚡ SPEED UP! ${spd.toFixed(2)}x`);
+          const curSpeedMult = speedMult(
+            currentLap + 1,
+            config.speedStep ?? 0.04,
+            config.speedCap ?? 1.5,
+            config.featureFlags?.feature_speed_ramp ?? true
+          );
+          if (curSpeedMult > 1.0) {
+            showHudToast(`⚡ SPEED UP! ${curSpeedMult.toFixed(2)}x`);
           }
         }
         prevLap = currentLap;
       }
 
-      // 2. Update Fuel Gauge
+      // 2. Update Fuel Gauge (~55% width bar with seconds inside)
       const fuelRatio = raceScene.fuelSystem.getRatio();
       const fuelMs = raceScene.fuelSystem.getFuelMs();
 
       if (fuelFillEl) {
         fuelFillEl.style.width = `${Math.min(100, Math.max(0, fuelRatio * 100))}%`;
-        fuelFillEl.className =
-          'fuel-gauge-fill' + (fuelRatio <= 0.25 ? ' critical' : fuelRatio <= 0.5 ? ' low' : '');
+        const isCritical = raceScene.fuelSystem.isLowFuel();
+        fuelFillEl.className = 'fuel-bar-fill' + (isCritical ? ' fuel-low-pulse' : '');
       }
 
       if (fuelSecEl) {
         fuelSecEl.textContent = `${Math.ceil(fuelMs / 1000)}s`;
       }
 
-      // 3. Update Pit Button visibility & pulsing (only when fuel <= 50%)
-      const canPit = raceScene.fuelSystem.isPitAllowed();
-      if (pitBtn) {
-        if (canPit) {
-          pitBtn.style.display = 'block';
-          pitBtn.classList.add('pulsing-pit');
-        } else {
-          pitBtn.style.display = 'none';
-          pitBtn.classList.remove('pulsing-pit');
-        }
+      // 3. Fade first-run hint on first steer input
+      if (firstRunHintEl && raceScene.inputManager.getSteerInput() !== 0) {
+        firstRunHintEl.classList.add('faded');
+        window.setTimeout(() => firstRunHintEl?.remove(), 500);
+        firstRunHintEl = null;
       }
 
-      // 4. Update Minimap Blinking Car Dot
+      // 4. Update Minimap (56x56 in bottom-right corner)
       if (miniCtx && miniCanvas && baseMinimapImg) {
-        miniCtx.clearRect(0, 0, 80, 80);
-        miniCtx.drawImage(baseMinimapImg, 0, 0);
+        miniCtx.clearRect(0, 0, 56, 56);
+        miniCtx.drawImage(baseMinimapImg, 0, 0, 56, 56);
 
         blinkCounter++;
         if (blinkCounter % 20 < 14) {
           const mCoords = raceScene.track.worldToMinimap(raceScene.car.x, raceScene.car.y);
+          // Scale from 80x80 to 56x56
+          const scale56 = 56 / 80;
+          const mx = mCoords.mx * scale56;
+          const my = mCoords.my * scale56;
+
           miniCtx.fillStyle = '#ff2e4d';
           miniCtx.beginPath();
-          miniCtx.arc(mCoords.mx, mCoords.my, 3.5, 0, Math.PI * 2);
+          miniCtx.arc(mx, my, 2.5, 0, Math.PI * 2);
           miniCtx.fill();
 
           miniCtx.fillStyle = '#ffffff';
           miniCtx.beginPath();
-          miniCtx.arc(mCoords.mx, mCoords.my, 1.5, 0, Math.PI * 2);
+          miniCtx.arc(mx, my, 1, 0, Math.PI * 2);
           miniCtx.fill();
         }
       }
@@ -530,6 +498,7 @@ export function renderRacingHud(
     if (backgroundPollTimer !== null) {
       window.clearInterval(backgroundPollTimer);
     }
+    unsubStateMachine();
     delete (window as any).__showHudToast;
   };
 }

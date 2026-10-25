@@ -38,10 +38,12 @@ export class Track {
   public readonly startPosition: Point2D;
   public readonly startAngle: number; // In radians
   public readonly stage: number;
+  public readonly lapNumber?: number;
 
-  constructor(stage = 1) {
+  constructor(stage = 1, customPoints?: TrackPoint[], lapNumber?: number) {
     this.stage = stage;
-    const rawPoints = this.generateCenterline(stage);
+    this.lapNumber = lapNumber;
+    const rawPoints = customPoints || this.generateCenterline(stage);
     this.points = rawPoints;
 
     this.totalLength = this.points[this.points.length - 1].distance;
@@ -54,6 +56,7 @@ export class Track {
     this.startPosition = { x: startPt.pos.x, y: startPt.pos.y };
     this.startAngle = Math.atan2(startPt.tangent.y, startPt.tangent.x);
   }
+
 
   private generateCenterline(stage = 1): TrackPoint[] {
     const rawControl = getControlPointsForStage(stage);
@@ -233,8 +236,8 @@ export class Track {
   /**
    * Render the complete racetrack once onto an HTML Canvas for the Phaser texture
    */
-  public renderToCanvas(): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
+  public renderToCanvas(existingCanvas?: HTMLCanvasElement): HTMLCanvasElement {
+    const canvas = existingCanvas || document.createElement('canvas');
     canvas.width = WORLD_WIDTH;
     canvas.height = WORLD_HEIGHT;
     const ctx = canvas.getContext('2d');

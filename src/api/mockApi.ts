@@ -49,9 +49,11 @@ export class MockApi implements GameApi {
   private answeredMap: Map<string, AnswerResult> = new Map();
   private currentIssuedQuestion: Question | null = null;
   private lockedUntil: number | null = null;
-  private fuelGrantedMsTotal = 30000;
+  private fuelGrantedMsTotal = DEFAULT_CONFIG.initialFuelMs;
   private minDriveMsTotal = 0;
   private lastLapAt: number | null = null;
+  private lastAnswerWasCorrect = false;
+  private lastAnswerAt: number | null = null;
   private joinedAt: number = Date.now();
   private simulateDelay: boolean;
 
@@ -66,7 +68,6 @@ export class MockApi implements GameApi {
       tankMaxMs: DEFAULT_CONFIG.tankMaxMs,
       initialFuelMs: DEFAULT_CONFIG.initialFuelMs,
       fuelPerCorrectMs: DEFAULT_CONFIG.fuelPerCorrectMs,
-      pitBelowFraction: DEFAULT_CONFIG.pitBelowFraction,
       questionTimeMs: DEFAULT_CONFIG.questionTimeMs,
       wrongLockoutMs: DEFAULT_CONFIG.wrongLockoutMs,
       minLapMs: DEFAULT_CONFIG.minLapMs,
@@ -185,9 +186,9 @@ export class MockApi implements GameApi {
   /**
    * Request question using B4 algorithm with difficulty curve and branch pool
    */
-  public async requestQuestion(): Promise<Question> {
+  public async requestQuestion(nowMs?: number): Promise<Question> {
     await this.delay();
-    const now = Date.now();
+    const now = nowMs ?? Date.now();
 
     // Check lockout
     if (this.lockedUntil && this.lockedUntil > now) {
@@ -201,6 +202,21 @@ export class MockApi implements GameApi {
         return this.currentIssuedQuestion;
       } else {
         this.currentIssuedQuestion = null;
+      }
+    }
+
+    // Anti-farming rule: if last answer was correct, do not issue new question until at least 0.8 * fuelPerCorrectMs
+    if (this.lastAnswerWasCorrect && this.lastAnswerAt !== null) {
+      const elapsed = now - this.lastAnswerAt;
+      const minGap = 0.8 * this.config.fuelPerCorrectMs;
+      if (elapsed < minGap) {
+        return {
+          questionId: '',
+          text: '',
+          options: [],
+          status: 'TOO_SOON',
+          waitMs: Math.round(minGap - elapsed),
+        };
       }
     }
 
@@ -288,6 +304,8 @@ export class MockApi implements GameApi {
       this.pendingQuestionAnswers.delete(questionId);
       this.currentIssuedQuestion = null;
       this.lockedUntil = submitTimeMs + this.config.wrongLockoutMs;
+      this.lastAnswerWasCorrect = false;
+      this.lastAnswerAt = submitTimeMs;
 
       const timeoutResult: AnswerResult = {
         correct: false,
@@ -312,8 +330,12 @@ export class MockApi implements GameApi {
         this.player.correct += 1;
       }
       this.fuelGrantedMsTotal += this.config.fuelPerCorrectMs;
+      this.lastAnswerWasCorrect = true;
+      this.lastAnswerAt = submitTimeMs;
     } else {
       this.lockedUntil = submitTimeMs + this.config.wrongLockoutMs;
+      this.lastAnswerWasCorrect = false;
+      this.lastAnswerAt = submitTimeMs;
     }
 
     const result: AnswerResult = {

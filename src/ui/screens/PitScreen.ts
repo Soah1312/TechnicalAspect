@@ -38,12 +38,12 @@ export function renderPitScreen(
         <div>
           <div style="display:flex; align-items:center; gap:6px;">
             <span class="retro-text highlight" style="font-size:12px;">
-              ${props.reason === 'voluntary' ? 'PIT STOP REFUEL' : 'OUT OF FUEL!'}
+              OUT OF FUEL!
             </span>
             <span id="q-diff-badge" style="display:none;"></span>
           </div>
           <p class="retro-text" style="font-size:7px; margin-top:3px; opacity:0.8;">
-            CAR STOPPED • RACE CLOCK ACTIVE
+            ANSWER QUESTION TO GET +10s FUEL
           </p>
         </div>
         <div style="text-align:right;">
@@ -280,9 +280,27 @@ export function renderPitScreen(
         sounds.playCorrect();
         Vibration.correct();
 
-        const fuelToAdd = result.fuelGrantedMs || config.fuelPerCorrectMs;
+        const fuelToAdd = result.fuelGrantedMs;
+        if (fuelToAdd !== config.fuelPerCorrectMs) {
+          console.error(
+            `[Fuel Assert Failed] Server granted ${fuelToAdd}ms but config specifies ${config.fuelPerCorrectMs}ms!`
+          );
+        }
+
+        (window as any).__lastCorrectTotal = result.correctTotal;
+
+        const fuelBefore = raceScene?.fuelSystem.getFuelMs() ?? 0;
         if (raceScene) {
           raceScene.fuelSystem.addFuel(fuelToAdd);
+        }
+        const fuelAfter = raceScene?.fuelSystem.getFuelMs() ?? 0;
+        const delta = fuelAfter - fuelBefore;
+
+        const isDebug = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1';
+        if (isDebug) {
+          console.log(
+            `[DEBUG ?debug=1] Fuel before: ${(fuelBefore / 1000).toFixed(3)}s | after: ${(fuelAfter / 1000).toFixed(3)}s | delta: +${(delta / 1000).toFixed(3)}s`
+          );
         }
 
         // Mark pit exited cleanly
@@ -291,12 +309,12 @@ export function renderPitScreen(
         if (statusBanner) {
           statusBanner.innerHTML = `
             <div style="background-color:var(--correct-green); color:#000; padding:6px 12px; font-size:10px; border:2px solid #000; text-align:center; font-weight:bold;">
-              CORRECT! +${Math.round(fuelToAdd / 1000)}s FUEL
+              CORRECT! +${(fuelToAdd / 1000).toFixed(0)}s FUEL
             </div>
           `;
         }
 
-        // Show floating "+20s" text and brief "GO!" cue
+        // Show floating fuel cue
         showFloatingFuelCue(Math.round(fuelToAdd / 1000));
 
         window.setTimeout(() => {

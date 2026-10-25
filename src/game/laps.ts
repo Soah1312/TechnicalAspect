@@ -57,6 +57,13 @@ export class LapManager {
     return this.lastLapTotalTimeMs;
   }
 
+  public updateGates(newGates: CheckpointGate[]): void {
+    this.gates.length = 0;
+    this.gates.push(...newGates);
+    this.nextExpectedGate = 1;
+    this.hasPrevPosition = false;
+  }
+
   public reset(startGate = 1): void {
     this.nextExpectedGate = startGate;
     this.currentLap = 0;
@@ -64,6 +71,7 @@ export class LapManager {
     this.currentLapTotalTimeMs = 0;
     this.hasPrevPosition = false;
   }
+
 
   /**
    * Update gate crossings and lap driving timers

@@ -20,13 +20,13 @@ const CARDS: CardInfo[] = [
     icon: '⛽',
     title: '2. FUEL IS TIME',
     description: 'Fuel drains continuously as you drive. If it runs out, your car rolls to a halt!',
-    hint: '(30 seconds of pure driving on a full tank)',
+    hint: '(10 seconds of pure driving on a full tank)',
   },
   {
     icon: '💡',
     title: '3. QUIZ TO REFUEL',
-    description: 'Answer tech questions to pump fuel! The race clock keeps ticking, so answer fast.',
-    hint: '(Voluntary pit stop is available when tank <= 50%)',
+    description: 'Run out of fuel? Answer a question to get +10 seconds.',
+    hint: '(Correct answer adds +10s fuel)',
   },
 ];
 

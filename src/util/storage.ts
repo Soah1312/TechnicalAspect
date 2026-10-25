@@ -7,6 +7,7 @@ const KEYS = {
   PLAYER_BRANCH: 'cfr_player_branch',
   TUTORIAL_SEEN: 'cfr_tutorial_seen',
   AUDIO_MUTED: 'cfr_audio_muted',
+  LAP_COUNT: 'cfr_lap_count',
 };
 
 // Handle force reset query
@@ -90,7 +91,26 @@ export const Storage = {
     }
   },
 
+  getLapCount(): number {
+    try {
+      if (typeof localStorage === 'undefined') return 0;
+      return parseInt(localStorage.getItem(KEYS.LAP_COUNT) || '0', 10) || 0;
+    } catch {
+      return 0;
+    }
+  },
+
+  setLapCount(laps: number): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(KEYS.LAP_COUNT, laps.toString());
+    } catch {
+      // Ignore
+    }
+  },
+
   clearPlayer(): void {
+
     try {
       localStorage.removeItem(KEYS.PLAYER_ID);
       localStorage.removeItem(KEYS.PLAYER_NAME);

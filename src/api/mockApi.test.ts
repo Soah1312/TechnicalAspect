@@ -57,7 +57,7 @@ describe('MockApi Quiz & Security Tests', () => {
 
   it('cycles through unseen questions without immediate repetition', async () => {
     const api = new MockApi(false);
-    api.setConfig({ wrongLockoutMs: 0 });
+    api.setConfig({ wrongLockoutMs: 0, fuelPerCorrectMs: 0 });
     const seenIds = new Set<string>();
 
     // Request and answer 60 questions

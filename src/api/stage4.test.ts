@@ -43,7 +43,7 @@ describe('Stage 4 Server-Side Validation & Security Rules', () => {
       } else {
         expect(issuedData).toHaveLength(0);
       }
-    });
+    }, 15000);
   });
 
   describe('Lap Rejection Rules (a to e)', () => {

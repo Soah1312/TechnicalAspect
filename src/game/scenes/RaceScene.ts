@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Track, WORLD_WIDTH, WORLD_HEIGHT } from '../track';
+import { generateTrack } from '../tracks/generator';
 import { Car } from '../car';
 import { FuelSystem } from '../fuel';
 import { LapManager, type LapCompleteEvent } from '../laps';
@@ -19,6 +20,11 @@ export class RaceScene extends Phaser.Scene {
   public lapManager!: LapManager;
   public inputManager!: InputManager;
   public currentStage = 1;
+  public currentLap = 1;
+  public useLapTracks = true;
+
+  private preloadedTrack: { lap: number; track: Track; textureKey: string } | null = null;
+  private isPreloadingNextTrack = false;
 
   private carSprite: Phaser.GameObjects.Sprite | null = null;
   private trackImage: Phaser.GameObjects.Image | null = null;
@@ -37,6 +43,7 @@ export class RaceScene extends Phaser.Scene {
   private isDebugLayout = false;
   private debugGraphics: Phaser.GameObjects.Graphics | null = null;
   private debugText: Phaser.GameObjects.Text | null = null;
+  private maxDeviationOverLap = 0;
 
   constructor() {
     super('RaceScene');
@@ -48,16 +55,44 @@ export class RaceScene extends Phaser.Scene {
       this.debugGraphics = this.add.graphics().setDepth(9999).setScrollFactor(0);
     }
 
-    // 1. Initialize Racetrack (Stage 1 Rookie)
-    this.currentStage = 1;
-    this.track = new Track(1);
+    // Config gate: feature_lap_tracks (default true)
+    this.useLapTracks = (DEFAULT_CONFIG.featureFlags?.feature_lap_tracks as boolean) !== false;
+    activeApi.getConfig().then(cfg => {
+      if (cfg?.featureFlags && typeof cfg.featureFlags.feature_lap_tracks === 'boolean') {
+        this.useLapTracks = cfg.featureFlags.feature_lap_tracks;
+      }
+    }).catch(() => {});
 
-    // 2. Render Track to Texture once for maximum 60FPS performance
-    if (!this.textures.exists('racetrack_surface_1')) {
-      const trackCanvas = this.track.renderToCanvas();
-      this.textures.addCanvas('racetrack_surface_1', trackCanvas);
+    // Resume lap progression from stored count on page refresh (Edge case: refresh on lap 7)
+    const storedLaps = Storage.getLapCount();
+    this.currentLap = storedLaps + 1;
+
+    // 1. Initialize Racetrack
+    if (this.useLapTracks) {
+      console.log(`[Track] Initializing Part 4 procedural track for Lap ${this.currentLap}`);
+      const genTrack = generateTrack(this.currentLap);
+      this.track = new Track(genTrack.meta.level, genTrack.points, this.currentLap);
+      const textureKey = `racetrack_lap_${this.currentLap}`;
+      if (!this.textures.exists(textureKey)) {
+        const trackCanvas = this.track.renderToCanvas();
+        this.textures.addCanvas(textureKey, trackCanvas);
+      }
+      this.trackImage = this.add.image(0, 0, textureKey).setOrigin(0, 0);
+
+      // Start background pre-generation of Lap N+1 after initial stable frames
+      this.time.delayedCall(500, () => {
+        this.schedulePreloadNextTrack(this.currentLap + 1);
+      });
+    } else {
+      this.currentStage = stageFor(this.currentLap, DEFAULT_TRACK_STAGES, true);
+      this.track = new Track(this.currentStage);
+      const textureKey = `racetrack_surface_${this.currentStage}`;
+      if (!this.textures.exists(textureKey)) {
+        const trackCanvas = this.track.renderToCanvas();
+        this.textures.addCanvas(textureKey, trackCanvas);
+      }
+      this.trackImage = this.add.image(0, 0, textureKey).setOrigin(0, 0);
     }
-    this.trackImage = this.add.image(0, 0, 'racetrack_surface_1').setOrigin(0, 0);
 
     // 3. Initialize Car at Start / Finish Line
     this.car = new Car(
@@ -69,10 +104,10 @@ export class RaceScene extends Phaser.Scene {
     // 4. Initialize Fuel & Lap Systems
     this.fuelSystem = new FuelSystem(
       DEFAULT_CONFIG.initialFuelMs,
-      DEFAULT_CONFIG.tankMaxMs,
-      DEFAULT_CONFIG.pitBelowFraction
+      DEFAULT_CONFIG.tankMaxMs
     );
     this.lapManager = new LapManager(this.track.gates);
+    this.lapManager.syncLapCount(storedLaps);
     this.inputManager = new InputManager();
 
     // 5. Setup Lap Events
@@ -81,14 +116,22 @@ export class RaceScene extends Phaser.Scene {
         sounds.playLap();
         Vibration.lap();
         console.log(
-          `[Lap] Lap ${ev.lapNumber} complete! Driving time: ${(ev.drivingTimeMs / 1000).toFixed(2)}s, Total time: ${(ev.totalTimeMs / 1000).toFixed(2)}s`
+          `[Lap] Lap ${ev.lapNumber} complete! Driving time: ${(ev.drivingTimeMs / 1000).toFixed(2)}s, Total time: ${(ev.totalTimeMs / 1000).toFixed(2)}s | Max center deviation: ${this.maxDeviationOverLap.toFixed(2)}px`
         );
+        this.maxDeviationOverLap = 0;
+        Storage.setLapCount(ev.lapNumber);
 
-        // Check if next lap enters a new track stage
         const nextLap = ev.lapNumber + 1;
-        const targetStage = stageFor(nextLap, DEFAULT_TRACK_STAGES, true);
-        if (targetStage !== this.currentStage) {
-          this.swapTrackStage(targetStage);
+
+        if (this.useLapTracks) {
+          // Part 4: Per-lap procedural track swap
+          this.swapToNextLapTrack(nextLap);
+        } else {
+          // Fallback track stage behavior
+          const targetStage = stageFor(nextLap, DEFAULT_TRACK_STAGES, true);
+          if (targetStage !== this.currentStage) {
+            this.swapTrackStage(targetStage);
+          }
         }
 
         try {
@@ -96,6 +139,7 @@ export class RaceScene extends Phaser.Scene {
           if (res.accepted) {
             console.log(`[Lap Server] Lap ${res.laps} verified by server!`);
             this.lapManager.syncLapCount(res.laps);
+            Storage.setLapCount(res.laps);
           } else {
             console.warn(`[Lap Server] Lap rejected by server: ${res.reason}`);
             this.lapManager.syncLapCount(res.laps);
@@ -123,12 +167,11 @@ export class RaceScene extends Phaser.Scene {
     this.carSprite.setOrigin(0.5, 0.5);
     this.carSprite.setDepth(10);
 
-    // 8. Setup Camera: smooth follow with lookahead, 360 px width visible
-    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    this.cameras.main.setZoom(1.0); // 360 world px wide visible
+    // 8. Setup Camera: exact center follow with roundPixels, 360 px width visible (Part 3)
+    this.cameras.main.setZoom(1.0);
     this.cameras.main.roundPixels = true;
-    this.cameras.main.scrollX = this.car.x - this.cameras.main.width / 2;
-    this.cameras.main.scrollY = this.car.y - this.cameras.main.height / 2;
+    this.cameras.main.scrollX = Math.round(this.car.x - this.cameras.main.width / 2);
+    this.cameras.main.scrollY = Math.round(this.car.y - this.cameras.main.height / 2);
 
     // Listen to state changes to enable/disable active race driving
     stateMachine.subscribe((newState: GameState) => {
@@ -141,6 +184,111 @@ export class RaceScene extends Phaser.Scene {
     });
 
     this.isRaceActive = stateMachine.getState() === 'RACING';
+  }
+
+  public async swapToNextLapTrack(nextLap: number): Promise<void> {
+    const showToast = (window as any).__showHudToast;
+
+    // If next track is not ready yet, wait up to 500ms with LOADING TRACK...
+    if (!this.preloadedTrack || this.preloadedTrack.lap !== nextLap) {
+      console.warn(`[Track] Preloaded track for Lap ${nextLap} not ready yet, waiting...`);
+      if (showToast) showToast('⏳ LOADING TRACK...');
+
+      const startWait = Date.now();
+      while ((!this.preloadedTrack || this.preloadedTrack.lap !== nextLap) && Date.now() - startWait < 500) {
+        await new Promise(r => setTimeout(r, 20));
+      }
+
+      if (!this.preloadedTrack || this.preloadedTrack.lap !== nextLap) {
+        console.warn(`[Track] Preload timeout for Lap ${nextLap}, generating synchronously`);
+        const gen = generateTrack(nextLap);
+        const nextTrack = new Track(gen.meta.level, gen.points, nextLap);
+        const textureKey = `racetrack_lap_${nextLap}`;
+        if (this.textures.exists(textureKey)) {
+          this.textures.remove(textureKey);
+        }
+        const canvas = nextTrack.renderToCanvas();
+        this.textures.addCanvas(textureKey, canvas);
+        this.preloadedTrack = { lap: nextLap, track: nextTrack, textureKey };
+      }
+    }
+
+    const { track: nextTrack, textureKey: nextTextureKey } = this.preloadedTrack!;
+    const oldKey = this.trackImage?.texture.key;
+
+    // 150ms camera flash effect
+    this.cameras.main.flash(150, 255, 255, 255);
+
+    // Toast in Part 2 toast slot
+    if (showToast) {
+      showToast(`🏁 LAP ${nextLap} · NEW TRACK!`);
+    }
+
+    // Seamless swap: keep car position, heading, speed, fuel
+    this.currentLap = nextLap;
+    this.track = nextTrack;
+    if (this.trackImage) {
+      this.trackImage.setTexture(nextTextureKey);
+    }
+    this.lapManager.updateGates(this.track.gates);
+    this.car.nearestTrackIndex = 0;
+
+    const updateMinimap = (window as any).__updateHudMinimap;
+    if (updateMinimap) {
+      updateMinimap(this.track);
+    }
+
+    // Destroy old texture to strictly maintain at most 2 textures in memory (current + next)
+    if (oldKey && oldKey !== nextTextureKey && this.textures.exists(oldKey)) {
+      this.textures.remove(oldKey);
+      console.log(`[Track] Swapped to Lap ${nextLap}, destroyed texture ${oldKey} (at most 2 textures in memory)`);
+    }
+
+    this.preloadedTrack = null;
+
+    // Schedule background pre-generation of lap N+1
+    this.schedulePreloadNextTrack(nextLap + 1);
+  }
+
+  public schedulePreloadNextTrack(nextLap: number): void {
+    if (this.isPreloadingNextTrack || (this.preloadedTrack && this.preloadedTrack.lap === nextLap)) {
+      return;
+    }
+    this.isPreloadingNextTrack = true;
+
+    // Time-sliced background generation via requestIdleCallback or setTimeout
+    const runner = typeof window !== 'undefined' && (window as any).requestIdleCallback
+      ? (window as any).requestIdleCallback
+      : (fn: Function) => setTimeout(fn, 20);
+
+    runner(() => {
+      try {
+        console.log(`[Track] Background pre-generating Lap ${nextLap} track...`);
+        const gen = generateTrack(nextLap);
+        const nextTrack = new Track(gen.meta.level, gen.points, nextLap);
+        const textureKey = `racetrack_lap_${nextLap}`;
+
+        if (this.textures.exists(textureKey)) {
+          this.textures.remove(textureKey);
+        }
+
+        const nextCanvas = nextTrack.renderToCanvas();
+        this.textures.addCanvas(textureKey, nextCanvas);
+
+        const memMb = ((WORLD_WIDTH * WORLD_HEIGHT * 4) / (1024 * 1024)).toFixed(1);
+        console.log(`[Track] Lap ${nextLap} track ready in background (${memMb} MB texture memory)`);
+
+        this.preloadedTrack = {
+          lap: nextLap,
+          track: nextTrack,
+          textureKey,
+        };
+      } catch (err) {
+        console.error(`[Track] Error preloading Lap ${nextLap}:`, err);
+      } finally {
+        this.isPreloadingNextTrack = false;
+      }
+    });
   }
 
   public swapTrackStage(nextStage: number): void {
@@ -169,6 +317,7 @@ export class RaceScene extends Phaser.Scene {
       showToast(`🏁 STAGE ${nextStage} · NEW TRACK!`);
     }
   }
+
 
   public updateCarTexture(playerId: string): void {
     const idx = this.getCarColorIndex(playerId);
@@ -244,19 +393,24 @@ export class RaceScene extends Phaser.Scene {
       this.carSprite.setRotation(this.car.heading + Math.PI / 2);
     }
 
-    // Camera follow with direction-aligned lookahead capped to ~5% height
-    const lookAheadDist = Math.min(28, this.cameras.main.height * 0.05);
-    const targetX = this.car.x + Math.cos(this.car.heading) * lookAheadDist;
-    const targetY = this.car.y + Math.sin(this.car.heading) * lookAheadDist;
+    // Exact Zero-Lag Center Camera Follow (Part 3)
+    // The car is always at the exact center of the visible screen (50% horizontal and vertical).
+    // Updated in the same frame, immediately after the car physics update, with 0 lag, 0 deadzone, 0 lookahead.
+    this.cameras.main.scrollX = Math.round(this.car.x - this.cameras.main.width / 2);
+    this.cameras.main.scrollY = Math.round(this.car.y - this.cameras.main.height / 2);
 
-    const destScrollX = targetX - this.cameras.main.width / 2;
-    const destScrollY = targetY - this.cameras.main.height / 2;
-
-    this.cameras.main.scrollX = Phaser.Math.Linear(this.cameras.main.scrollX, destScrollX, 0.1);
-    this.cameras.main.scrollY = Phaser.Math.Linear(this.cameras.main.scrollY, destScrollY, 0.1);
+    // Deviation tracking for Part 3 debug and validation
+    const carScreenX = this.car.x - this.cameras.main.scrollX;
+    const carScreenY = this.car.y - this.cameras.main.scrollY;
+    const screenCenterX = this.cameras.main.width / 2;
+    const screenCenterY = this.cameras.main.height / 2;
+    const curDev = Math.hypot(carScreenX - screenCenterX, carScreenY - screenCenterY);
+    if (curDev > this.maxDeviationOverLap) {
+      this.maxDeviationOverLap = curDev;
+    }
 
     if (this.isDebugLayout) {
-      this.renderDebugLayout();
+      this.renderDebugLayout(curDev);
     }
   }
 
@@ -264,10 +418,14 @@ export class RaceScene extends Phaser.Scene {
     if (this.cameras && this.cameras.main) {
       this.cameras.main.setSize(width, height);
       this.cameras.main.setZoom(1.0);
+      if (this.car) {
+        this.cameras.main.scrollX = Math.round(this.car.x - width / 2);
+        this.cameras.main.scrollY = Math.round(this.car.y - height / 2);
+      }
     }
   }
 
-  private renderDebugLayout(): void {
+  private renderDebugLayout(curDev = 0): void {
     if (!this.debugGraphics) return;
     this.debugGraphics.clear();
 
@@ -283,37 +441,34 @@ export class RaceScene extends Phaser.Scene {
     this.debugGraphics.lineTo(w / 2, h);
     this.debugGraphics.strokePath();
 
-    // 2. 45% - 55% Safe Zone (Green)
-    this.debugGraphics.lineStyle(1, 0x39ff14, 0.6);
-    this.debugGraphics.strokeRect(0, h * 0.45, w, h * 0.10);
-    this.debugGraphics.fillStyle(0x39ff14, 0.08);
-    this.debugGraphics.fillRect(0, h * 0.45, w, h * 0.10);
+    // 2. Center dot (Red marker at exact center)
+    this.debugGraphics.fillStyle(0xff2e4d, 0.9);
+    this.debugGraphics.fillCircle(w / 2, h / 2, 2);
 
-    // 3. HUD top area & control bottom area (Yellow outlines)
-    this.debugGraphics.lineStyle(1, 0xffd400, 0.5);
-    this.debugGraphics.strokeRect(2, 2, w - 4, 60);
-    this.debugGraphics.strokeRect(2, h - 100, w - 4, 98);
+    // 3. Top Strip bounds and screen height percentage (Part 2)
+    const topStripEl = document.querySelector('.hud-topbar');
+    const stripRect = topStripEl?.getBoundingClientRect();
+    const stripHeightPx = stripRect ? Math.round(stripRect.height) : 40;
+    const stripPct = ((stripHeightPx / (window.innerHeight || h)) * 100).toFixed(1);
 
-    // 4. Car screen position fraction
-    const carScreenY = this.car.y - this.cameras.main.scrollY;
-    const carFrac = (carScreenY / h) * 100;
-    const inSafe = carFrac >= 45 && carFrac <= 55;
+    this.debugGraphics.lineStyle(2, 0xff00ff, 0.8);
+    this.debugGraphics.strokeRect(0, 0, w, stripHeightPx);
 
     if (!this.debugText) {
-      this.debugText = this.add.text(8, 70, '', {
+      this.debugText = this.add.text(8, stripHeightPx + 6, '', {
         fontSize: '8px',
         fontFamily: 'monospace',
-        backgroundColor: '#000000dd',
+        backgroundColor: '#000000ee',
         padding: { x: 4, y: 3 },
       }).setScrollFactor(0).setDepth(10000);
     }
 
     this.debugText.setText(
-      `VIEWPORT: ${window.innerWidth}x${window.innerHeight}\n` +
-      `DPR: ${(window.devicePixelRatio || 1).toFixed(1)} | CANVAS: ${w}x${h}\n` +
-      `CAR Y: ${carFrac.toFixed(1)}% [${inSafe ? 'CENTERED 45-55%' : 'OFFSET'}]`
+      `VIEWPORT: ${window.innerWidth}x${window.innerHeight} | CANVAS: ${w}x${h}\n` +
+      `TOP STRIP: ${stripHeightPx}px (${stripPct}% of screen, <= 8%)\n` +
+      `CAR DEV: ${curDev.toFixed(2)}px | MAX LAP DEV: ${this.maxDeviationOverLap.toFixed(2)}px [<= 2px]`
     );
-    this.debugText.setColor(inSafe ? '#39ff14' : '#ff2e4d');
+    this.debugText.setColor(curDev <= 2.0 ? '#39ff14' : '#ff2e4d');
   }
 
   public getPerformanceStats(): {

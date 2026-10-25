@@ -22,14 +22,16 @@ export const PALETTE = {
 } as const;
 
 export const DEFAULT_CONFIG = {
-  tankMaxMs: 30000,
-  initialFuelMs: 30000,
-  fuelPerCorrectMs: 20000,
-  pitBelowFraction: 0.5,
+  tankMaxMs: 10000,
+  initialFuelMs: 10000,
+  fuelPerCorrectMs: 10000,
   questionTimeMs: 15000,
   wrongLockoutMs: 3000,
   minLapMs: 36000,
   isOpen: true,
+  featureFlags: {
+    feature_lap_tracks: true,
+  },
 } as const;
 
 // Read query params for testing and debugging

@@ -40,7 +40,22 @@ export class PitManager {
     return false;
   }
 
+  /**
+   * Fetches the next question. If server returns TOO_SOON (anti-farming rule),
+   * waits for waitMs and retries automatically so normal play never hits an error.
+   */
   public async fetchQuestion(): Promise<Question> {
+    const maxRetries = 10;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const q = await this.api.requestQuestion();
+      if (q.status === 'TOO_SOON') {
+        const waitMs = Math.max(200, Math.min(q.waitMs || 1000, 3000));
+        console.log(`[PitManager] Anti-farming wait: retrying in ${waitMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        continue;
+      }
+      return q;
+    }
     return this.api.requestQuestion();
   }
 
