@@ -14,6 +14,7 @@ import { renderClosedScreen } from './screens/ClosedScreen';
 import { renderErrorScreen } from './screens/ErrorScreen';
 import { DEBUG_CONFIG } from '../config/constants';
 import { clock } from '../util/clock';
+import { analytics } from '../util/analytics';
 
 export class ScreenManager {
   private container: HTMLElement;
@@ -126,6 +127,7 @@ export class ScreenManager {
       }
 
       case 'RACING': {
+        analytics.trackRaceStart();
         const raceScene = this.game?.scene.getScene('RaceScene') as RaceScene | undefined;
         this.activeCleanup = renderRacingHud(this.container, {
           api: this.api,
@@ -149,6 +151,8 @@ export class ScreenManager {
 
       case 'ENDED': {
         const laps = (context.laps as number) ?? 0;
+        const correctAnswers = ((window as any).__lastCorrectTotal as number) ?? 0;
+        analytics.trackRaceFinished(laps * 1000 + correctAnswers * 100, laps, correctAnswers);
         this.activeCleanup = renderResultsScreen(this.container, {
           api: this.api,
           laps,

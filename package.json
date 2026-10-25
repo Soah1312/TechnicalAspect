@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run",
+    "test": "vitest run --pool=threads",
     "loadtest": "npx tsx scripts/load_test.ts",
     "questions:validate": "node scripts/validate_questions.mjs",
     "questions:seed": "node scripts/seed_questions_from_csv.mjs"
@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
+    "@vercel/analytics": "^2.0.1",
     "phaser": "^4.2.1"
   }
 }

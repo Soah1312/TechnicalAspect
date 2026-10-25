@@ -3,8 +3,13 @@ import { activeApi } from './api';
 import { renderLeaderboardPage } from './ui/screens/LeaderboardPage';
 import { networkMonitor } from './util/network';
 import { sounds } from './audio/soundManager';
+import { analytics } from './util/analytics';
 
 async function bootstrapLeaderboard() {
+  // Initialize Vercel Analytics
+  analytics.init();
+  analytics.trackLeaderboardView();
+
   const uiContainer = document.getElementById('ui-container');
   const appContainer = document.getElementById('app') || document.body;
 

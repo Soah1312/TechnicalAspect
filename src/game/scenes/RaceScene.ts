@@ -12,6 +12,7 @@ import { Storage } from '../../util/storage';
 import { PALETTE, DEFAULT_CONFIG } from '../../config/constants';
 import { activeApi } from '../../api';
 import { speedMult } from '../../shared/difficulty';
+import { analytics } from '../../util/analytics';
 
 export class RaceScene extends Phaser.Scene {
   public track!: Track;
@@ -95,6 +96,7 @@ export class RaceScene extends Phaser.Scene {
       onLapComplete: async (ev: LapCompleteEvent) => {
         sounds.playLap();
         Vibration.lap();
+        analytics.trackLapCompleted(ev.lapNumber);
         console.log(
           `[Lap] Lap ${ev.lapNumber} complete! Driving time: ${(ev.drivingTimeMs / 1000).toFixed(2)}s, Total time: ${(ev.totalTimeMs / 1000).toFixed(2)}s | Max center deviation: ${this.maxDeviationOverLap.toFixed(2)}px`
         );

@@ -6,6 +6,7 @@ import { Vibration } from '../../util/vibration';
 import { PitManager } from '../../game/pit';
 import type { RaceScene } from '../../game/scenes/RaceScene';
 import { ICONS } from '../icons';
+import { analytics } from '../../util/analytics';
 
 interface PitScreenProps {
   api: GameApi;
@@ -208,6 +209,7 @@ export function renderPitScreen(
 
     sounds.playWrong();
     Vibration.wrong();
+    analytics.trackPitStop('wrong');
 
     // Disable all options
     const buttons = qOptionsEl?.querySelectorAll('.option-btn');
@@ -289,6 +291,7 @@ export function renderPitScreen(
         }
         sounds.playCorrect();
         Vibration.correct();
+        analytics.trackPitStop('correct');
 
         const fuelToAdd = result.fuelGrantedMs;
         if (fuelToAdd !== config.fuelPerCorrectMs) {
@@ -347,6 +350,7 @@ export function renderPitScreen(
 
         sounds.playWrong();
         Vibration.wrong();
+        analytics.trackPitStop('wrong');
         isLockedOut = true;
 
         let lockoutRemaining = Math.round(config.wrongLockoutMs / 1000);

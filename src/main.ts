@@ -12,8 +12,12 @@ import type { RaceScene } from './game/scenes/RaceScene';
 import { networkMonitor } from './util/network';
 import { renderLeaderboardPage } from './ui/screens/LeaderboardPage';
 import { ICONS } from './ui/icons';
+import { analytics } from './util/analytics';
 
 async function bootstrap() {
+  // Initialize Vercel Analytics
+  analytics.init();
+
   const uiContainer = document.getElementById('ui-container');
   if (!uiContainer) {
     console.error('Fatal: #ui-container element not found');

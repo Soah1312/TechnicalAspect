@@ -3,6 +3,7 @@ import type { GameApi, LeaderboardRow, Branch, Year } from '../../api/types';
 import { Storage } from '../../util/storage';
 import { sounds } from '../../audio/soundManager';
 import { ICONS } from '../icons';
+import { analytics } from '../../util/analytics';
 
 const BRANCHES: Branch[] = ['COMPS', 'CSE', 'ECS', 'MECH', 'AIDS'];
 const YEARS: Year[] = [1, 2, 3, 4];
@@ -590,6 +591,7 @@ export function renderLeaderboardPage(
       branchPills.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       selectedBranch = (btn.getAttribute('data-branch') || 'ALL') as Branch | 'ALL';
+      analytics.trackLeaderboardView(selectedBranch, String(selectedYear));
       renderTableRows();
     });
   });
@@ -602,6 +604,7 @@ export function renderLeaderboardPage(
       btn.classList.add('active');
       const val = btn.getAttribute('data-year');
       selectedYear = val === 'ALL' ? 'ALL' : (Number(val) as Year);
+      analytics.trackLeaderboardView(selectedBranch, String(selectedYear));
       renderTableRows();
     });
   });

@@ -4,6 +4,7 @@ import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
 import { sounds } from '../../audio/soundManager';
 import { ICONS } from '../icons';
+import { analytics } from '../../util/analytics';
 
 const BRANCHES: Branch[] = ['COMPS', 'CSE', 'ECS', 'MECH', 'AIDS'];
 const YEARS: Year[] = [1, 2, 3, 4];
@@ -217,6 +218,10 @@ export function renderJoinScreen(
     try {
       const player = await api.joinRace(name, selectedBranch, selectedYear);
       if (disposed) return;
+      analytics.trackGameJoin({
+        branch: String(selectedBranch || 'COMPS'),
+        year: String(selectedYear || '1'),
+      });
       sounds.playCorrect();
       const config = await api.getConfig();
 

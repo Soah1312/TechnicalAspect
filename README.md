@@ -1,12 +1,12 @@
-# 🏎️ Crescendo Fuel Rush
+# Crescendo Fuel Rush
 
 **Crescendo Fuel Rush** is a high-octane retro-arcade top-down racing game where speed meets knowledge. Players navigate dynamic racetracks, manage a tight 10-second fuel tank, and recharge on empty by answering technical trivia questions tailored to their engineering branch and year.
 
-Built with **Phaser 3**, **TypeScript**, **Vite**, and backed by **Supabase** (PostgreSQL with server-authoritative anti-cheat logic).
+Built with **Phaser 3**, **TypeScript**, **Vite**, **Vercel Web Analytics**, and backed by **Supabase** (PostgreSQL with server-authoritative anti-cheat logic).
 
 ---
 
-## 🎮 Core Gameplay & Mechanics
+## Core Gameplay & Mechanics
 
 1. **Top-Down Arcade Driving**:
    - Touch/keyboard responsive steering with momentum, grass friction drag, and dynamic cornering.
@@ -27,7 +27,7 @@ Built with **Phaser 3**, **TypeScript**, **Vite**, and backed by **Supabase** (P
 4. **Dedicated Live Leaderboard Page**:
    - Standalone, projector-ready, and mobile-responsive live standings at `/leaderboard` (or `/leaderboard.html`).
    - **Score System**: `Score = (Laps × 1,000 PTS) + (Correct Answers × 100 PTS)` alongside full driving stats.
-   - **Podium Showcase**: Top 3 racers highlighted on 👑 Gold, 🥈 Silver, and 🥉 Bronze podium stands.
+   - **Podium Showcase**: Top 3 racers highlighted on Gold, Silver, and Bronze podium stands.
    - **Full Racer Details**: Displays Rank, Driver Name, Score, Branch (`COMPS`, `CSE`, `ECS`, `MECH`, `AIDS`), and Year (`1st` to `4th`).
    - **Interactive Filters & Search**: Instant name search, branch tabs, year tabs, and sort toggles (Score / Laps / Quiz).
    - **Live Auto-Refresh**: Polls authoritative telemetry every 10 seconds with a real-time countdown indicator and manual refresh.
@@ -51,17 +51,18 @@ Built with **Phaser 3**, **TypeScript**, **Vite**, and backed by **Supabase** (P
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Client**: [Phaser 3](https://phaser.io/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
-- **UI & Styling**: Vanilla CSS, Retro Arcade Neon aesthetic, HTML5 Canvas
+- **Analytics & Telemetry**: [@vercel/analytics](https://vercel.com/docs/analytics) (Web Analytics, Page Views, and Custom Event Tracking)
+- **UI & Styling**: Vanilla CSS, Retro Arcade Neon aesthetic, Inline SVG Vector Icons, HTML5 Canvas
 - **Backend & Database**: [Supabase](https://supabase.com/) (PostgreSQL 15+, PL/pgSQL RPCs, Row Level Security, Anonymous Auth)
 - **Audio**: Web Audio API retro synth sound effects (engine pitch, tire squeal, checkpoint chimes, fuel alerts)
 - **Testing**: [Vitest](https://vitest.dev/)
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Prerequisites
 - [Node.js](https://nodejs.org/) (v18 or higher recommended)
@@ -99,7 +100,7 @@ Open `http://localhost:5173` (or the port indicated in terminal) in your browser
 
 ---
 
-## 🧪 Testing & Validation
+## Testing & Validation
 
 Run the automated Vitest test suite:
 ```bash
@@ -123,7 +124,7 @@ npm run build
 
 ---
 
-## 🕹️ Debug Query Parameters
+## Debug Query Parameters
 
 Append these query parameters to the URL for testing:
 - `?debug=1`: Logs exact fuel before/after answers and delta (`+10.000 s`).
@@ -132,7 +133,7 @@ Append these query parameters to the URL for testing:
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ├── public/                 # Static assets and question CSVs
@@ -158,7 +159,7 @@ Append these query parameters to the URL for testing:
 
 ---
 
-## 🔄 Resetting Game Data (Post-Testing Clean Slate)
+## Resetting Game Data (Post-Testing Clean Slate)
 
 Before opening the game for all live participants, perform two quick resets:
 
@@ -180,5 +181,5 @@ To test the clean onboarding flow on a device that already joined:
 
 ---
 
-## 📜 License
+## License
 This project is proprietary and intended for event and academic use.
