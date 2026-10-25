@@ -27,9 +27,9 @@ describe('Part A - Layout Centering & Answer Reveal Tests', () => {
       expect(h).toBe(800);
     });
 
-    it('clamps to bounds [560, 860] on extreme short and tall screens', () => {
-      expect(calculateLogicalHeight(360, 480)).toBe(560); // Clamped minimum
-      expect(calculateLogicalHeight(360, 1200)).toBe(860); // Clamped maximum
+    it('preserves the viewport aspect ratio on short and tall screens', () => {
+      expect(calculateLogicalHeight(360, 480)).toBe(480);
+      expect(calculateLogicalHeight(360, 1200)).toBe(1200);
     });
   });
 

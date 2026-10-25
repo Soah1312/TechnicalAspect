@@ -12,7 +12,7 @@ export interface LapManagerEvents {
 }
 
 export class LapManager {
-  private readonly gates: CheckpointGate[];
+  private gates: CheckpointGate[];
   private nextExpectedGate = 1; // Starts on Gate 0, expecting Gate 1 first
   private currentLap = 0;
 
@@ -26,7 +26,7 @@ export class LapManager {
   private listeners: LapManagerEvents = {};
 
   constructor(gates: CheckpointGate[]) {
-    this.gates = gates;
+    this.gates = [...gates];
   }
 
   public setListeners(events: LapManagerEvents): void {
@@ -58,8 +58,7 @@ export class LapManager {
   }
 
   public updateGates(newGates: CheckpointGate[]): void {
-    this.gates.length = 0;
-    this.gates.push(...newGates);
+    this.gates = [...newGates];
     this.nextExpectedGate = 1;
     this.hasPrevPosition = false;
   }

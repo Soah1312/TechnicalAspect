@@ -11,7 +11,7 @@ import { stateMachine, type GameState } from '../stateMachine';
 import { Storage } from '../../util/storage';
 import { PALETTE, DEFAULT_CONFIG } from '../../config/constants';
 import { activeApi } from '../../api';
-import { speedMult, stageFor, DEFAULT_TRACK_STAGES } from '../../shared/difficulty';
+import { speedMult } from '../../shared/difficulty';
 
 export class RaceScene extends Phaser.Scene {
   public track!: Track;
@@ -19,9 +19,7 @@ export class RaceScene extends Phaser.Scene {
   public fuelSystem!: FuelSystem;
   public lapManager!: LapManager;
   public inputManager!: InputManager;
-  public currentStage = 1;
   public currentLap = 1;
-  public useLapTracks = true;
 
   private preloadedTrack: { lap: number; track: Track; textureKey: string } | null = null;
   private isPreloadingNextTrack = false;
@@ -55,44 +53,25 @@ export class RaceScene extends Phaser.Scene {
       this.debugGraphics = this.add.graphics().setDepth(9999).setScrollFactor(0);
     }
 
-    // Config gate: feature_lap_tracks (default true)
-    this.useLapTracks = (DEFAULT_CONFIG.featureFlags?.feature_lap_tracks as boolean) !== false;
-    activeApi.getConfig().then(cfg => {
-      if (cfg?.featureFlags && typeof cfg.featureFlags.feature_lap_tracks === 'boolean') {
-        this.useLapTracks = cfg.featureFlags.feature_lap_tracks;
-      }
-    }).catch(() => {});
-
     // Resume lap progression from stored count on page refresh (Edge case: refresh on lap 7)
     const storedLaps = Storage.getLapCount();
     this.currentLap = storedLaps + 1;
 
     // 1. Initialize Racetrack
-    if (this.useLapTracks) {
-      console.log(`[Track] Initializing Part 4 procedural track for Lap ${this.currentLap}`);
-      const genTrack = generateTrack(this.currentLap);
-      this.track = new Track(genTrack.meta.level, genTrack.points, this.currentLap);
-      const textureKey = `racetrack_lap_${this.currentLap}`;
-      if (!this.textures.exists(textureKey)) {
-        const trackCanvas = this.track.renderToCanvas();
-        this.textures.addCanvas(textureKey, trackCanvas);
-      }
-      this.trackImage = this.add.image(0, 0, textureKey).setOrigin(0, 0);
-
-      // Start background pre-generation of Lap N+1 after initial stable frames
-      this.time.delayedCall(500, () => {
-        this.schedulePreloadNextTrack(this.currentLap + 1);
-      });
-    } else {
-      this.currentStage = stageFor(this.currentLap, DEFAULT_TRACK_STAGES, true);
-      this.track = new Track(this.currentStage);
-      const textureKey = `racetrack_surface_${this.currentStage}`;
-      if (!this.textures.exists(textureKey)) {
-        const trackCanvas = this.track.renderToCanvas();
-        this.textures.addCanvas(textureKey, trackCanvas);
-      }
-      this.trackImage = this.add.image(0, 0, textureKey).setOrigin(0, 0);
+    console.log(`[Track] Initializing Part 4 procedural track for Lap ${this.currentLap}`);
+    const genTrack = generateTrack(this.currentLap);
+    this.track = new Track(genTrack.meta.level, genTrack.points, this.currentLap);
+    const textureKey = `racetrack_lap_${this.currentLap}`;
+    if (!this.textures.exists(textureKey)) {
+      const trackCanvas = this.track.renderToCanvas();
+      this.textures.addCanvas(textureKey, trackCanvas);
     }
+    this.trackImage = this.add.image(0, 0, textureKey).setOrigin(0, 0);
+
+    // Start background pre-generation of Lap N+1 after initial stable frames
+    this.time.delayedCall(500, () => {
+      this.schedulePreloadNextTrack(this.currentLap + 1);
+    });
 
     // 3. Initialize Car at Start / Finish Line
     this.car = new Car(
@@ -121,18 +100,8 @@ export class RaceScene extends Phaser.Scene {
         this.maxDeviationOverLap = 0;
         Storage.setLapCount(ev.lapNumber);
 
-        const nextLap = ev.lapNumber + 1;
-
-        if (this.useLapTracks) {
-          // Part 4: Per-lap procedural track swap
-          this.swapToNextLapTrack(nextLap);
-        } else {
-          // Fallback track stage behavior
-          const targetStage = stageFor(nextLap, DEFAULT_TRACK_STAGES, true);
-          if (targetStage !== this.currentStage) {
-            this.swapTrackStage(targetStage);
-          }
-        }
+        // Track progression is local and never waits for score synchronization.
+        this.swapToNextLapTrack(this.currentLap + 1);
 
         try {
           const res = await activeApi.submitLap(ev.lapNumber, ev.drivingTimeMs);
@@ -143,6 +112,7 @@ export class RaceScene extends Phaser.Scene {
           } else {
             console.warn(`[Lap Server] Lap rejected by server: ${res.reason}`);
             this.lapManager.syncLapCount(res.laps);
+            Storage.setLapCount(res.laps);
           }
         } catch (err) {
           console.error('[Lap Server] submitLap error:', err);
@@ -166,6 +136,7 @@ export class RaceScene extends Phaser.Scene {
     this.carSprite = this.add.sprite(this.car.x, this.car.y, `car_${colorIndex}`);
     this.carSprite.setOrigin(0.5, 0.5);
     this.carSprite.setDepth(10);
+    this.carSprite.setScale(1.5);
 
     // 8. Setup Camera: exact center follow with roundPixels, 360 px width visible (Part 3)
     this.cameras.main.setZoom(1.0);
@@ -183,34 +154,22 @@ export class RaceScene extends Phaser.Scene {
       }
     });
 
+    this.layoutRaceViewport();
     this.isRaceActive = stateMachine.getState() === 'RACING';
   }
 
-  public async swapToNextLapTrack(nextLap: number): Promise<void> {
+  public swapToNextLapTrack(nextLap: number): void {
     const showToast = (window as any).__showHudToast;
 
-    // If next track is not ready yet, wait up to 500ms with LOADING TRACK...
+    // Switch at the finish line immediately, even if idle preloading has not run.
     if (!this.preloadedTrack || this.preloadedTrack.lap !== nextLap) {
-      console.warn(`[Track] Preloaded track for Lap ${nextLap} not ready yet, waiting...`);
-      if (showToast) showToast('⏳ LOADING TRACK...');
-
-      const startWait = Date.now();
-      while ((!this.preloadedTrack || this.preloadedTrack.lap !== nextLap) && Date.now() - startWait < 500) {
-        await new Promise(r => setTimeout(r, 20));
+      const gen = generateTrack(nextLap);
+      const track = new Track(gen.meta.level, gen.points, nextLap);
+      const textureKey = `racetrack_lap_${nextLap}`;
+      if (!this.textures.exists(textureKey)) {
+        this.textures.addCanvas(textureKey, track.renderToCanvas());
       }
-
-      if (!this.preloadedTrack || this.preloadedTrack.lap !== nextLap) {
-        console.warn(`[Track] Preload timeout for Lap ${nextLap}, generating synchronously`);
-        const gen = generateTrack(nextLap);
-        const nextTrack = new Track(gen.meta.level, gen.points, nextLap);
-        const textureKey = `racetrack_lap_${nextLap}`;
-        if (this.textures.exists(textureKey)) {
-          this.textures.remove(textureKey);
-        }
-        const canvas = nextTrack.renderToCanvas();
-        this.textures.addCanvas(textureKey, canvas);
-        this.preloadedTrack = { lap: nextLap, track: nextTrack, textureKey };
-      }
+      this.preloadedTrack = { lap: nextLap, track, textureKey };
     }
 
     const { track: nextTrack, textureKey: nextTextureKey } = this.preloadedTrack!;
@@ -259,10 +218,12 @@ export class RaceScene extends Phaser.Scene {
     // Time-sliced background generation via requestIdleCallback or setTimeout
     const runner = typeof window !== 'undefined' && (window as any).requestIdleCallback
       ? (window as any).requestIdleCallback
-      : (fn: Function) => setTimeout(fn, 20);
+      : (fn: () => void) => setTimeout(fn, 20);
 
     runner(() => {
       try {
+        // An immediate finish-line swap may have overtaken this idle callback.
+        if (nextLap <= this.currentLap) return;
         console.log(`[Track] Background pre-generating Lap ${nextLap} track...`);
         const gen = generateTrack(nextLap);
         const nextTrack = new Track(gen.meta.level, gen.points, nextLap);
@@ -287,37 +248,10 @@ export class RaceScene extends Phaser.Scene {
         console.error(`[Track] Error preloading Lap ${nextLap}:`, err);
       } finally {
         this.isPreloadingNextTrack = false;
+        if (nextLap <= this.currentLap) this.schedulePreloadNextTrack(this.currentLap + 1);
       }
     });
   }
-
-  public swapTrackStage(nextStage: number): void {
-    if (nextStage === this.currentStage) return;
-    console.log(`[Track] Swapping track from Stage ${this.currentStage} to Stage ${nextStage}`);
-
-    const textureKey = `racetrack_surface_${nextStage}`;
-    if (!this.textures.exists(textureKey)) {
-      const nextTrack = new Track(nextStage);
-      const trackCanvas = nextTrack.renderToCanvas();
-      this.textures.addCanvas(textureKey, trackCanvas);
-    }
-
-    this.currentStage = nextStage;
-    this.track = new Track(nextStage);
-    if (this.trackImage) {
-      this.trackImage.setTexture(textureKey);
-    }
-
-    // 150ms camera flash effect
-    this.cameras.main.flash(150, 255, 255, 255);
-
-    // Toast banner
-    const showToast = (window as any).__showHudToast;
-    if (showToast) {
-      showToast(`🏁 STAGE ${nextStage} · NEW TRACK!`);
-    }
-  }
-
 
   public updateCarTexture(playerId: string): void {
     const idx = this.getCarColorIndex(playerId);
@@ -414,15 +348,22 @@ export class RaceScene extends Phaser.Scene {
     }
   }
 
-  public onLogicalResize(width: number, height: number): void {
-    if (this.cameras && this.cameras.main) {
-      this.cameras.main.setSize(width, height);
-      this.cameras.main.setZoom(1.0);
-      if (this.car) {
-        this.cameras.main.scrollX = Math.round(this.car.x - width / 2);
-        this.cameras.main.scrollY = Math.round(this.car.y - height / 2);
-      }
+  public layoutRaceViewport(): void {
+    const canvas = this.game.canvas.getBoundingClientRect();
+    const top = document.querySelector('.race-telemetry')?.getBoundingClientRect().bottom ?? canvas.top;
+    const bottom = document.querySelector('.steer-controls-container')?.getBoundingClientRect().top ?? canvas.bottom;
+    const ratio = this.scale.width / Math.max(1, canvas.width);
+    const y = Math.max(0, (top - canvas.top) * ratio);
+    const height = Math.max(1, (bottom - canvas.top) * ratio - y);
+    this.cameras.main.setViewport(0, y, this.scale.width, height);
+    if (this.car) {
+      this.cameras.main.scrollX = Math.round(this.car.x - this.cameras.main.width / 2);
+      this.cameras.main.scrollY = Math.round(this.car.y - height / 2);
     }
+  }
+
+  public onLogicalResize(_width: number, _height: number): void {
+    if (this.cameras?.main) this.layoutRaceViewport();
   }
 
   private renderDebugLayout(curDev = 0): void {

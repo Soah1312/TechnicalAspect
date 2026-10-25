@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../util/html';
 import type { GameApi, Branch, Year } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
@@ -12,6 +13,8 @@ export function renderJoinScreen(
   defaultName = ''
 ): () => void {
   const storedPlayer = Storage.getPlayer();
+  let submitting = false;
+  let disposed = false;
   let selectedBranch: Branch | null = (storedPlayer?.branch as Branch) || null;
   let selectedYear: Year | null = storedPlayer?.year ? (Number(storedPlayer.year) as Year) : null;
 
@@ -41,7 +44,7 @@ export function renderJoinScreen(
             autocomplete="off"
             autocorrect="off"
             spellcheck="false"
-            value="${defaultName || storedPlayer?.name || ''}"
+            value="${escapeHtml(defaultName || storedPlayer?.name || '')}"
           />
 
           <!-- Branch Selection Group -->
@@ -127,7 +130,7 @@ export function renderJoinScreen(
   const updateButtonState = () => {
     if (!button || !input) return;
     const nameValid = input.value.trim().length >= 2;
-    button.disabled = !(nameValid && selectedBranch && selectedYear);
+    button.disabled = submitting || !(nameValid && selectedBranch && selectedYear);
   };
 
   branchBtns.forEach((btn) => {
@@ -186,6 +189,7 @@ export function renderJoinScreen(
 
   const handleSubmit = async () => {
     sounds.unlock();
+    if (submitting || disposed) return;
 
     if (!input || !button || !errorBox || !selectedBranch || !selectedYear) return;
     const name = input.value.trim();
@@ -202,12 +206,15 @@ export function renderJoinScreen(
     input.classList.remove('input-error');
     button.disabled = true;
     button.textContent = 'CONNECTING...';
+    submitting = true;
 
     try {
       const player = await api.joinRace(name, selectedBranch, selectedYear);
+      if (disposed) return;
       sounds.playCorrect();
       const config = await api.getConfig();
 
+      if (disposed) return;
       // Check if tutorial seen this session
       const tutorialSeen = Storage.isTutorialSeen();
       if (!tutorialSeen) {
@@ -217,6 +224,8 @@ export function renderJoinScreen(
         stateMachine.transition('COUNTDOWN', { player, config });
       }
     } catch (err: unknown) {
+      if (disposed) return;
+      submitting = false;
       button.disabled = false;
       button.textContent = 'START ENGINE';
       sounds.playWrong();
@@ -235,6 +244,7 @@ export function renderJoinScreen(
   input?.focus();
 
   return () => {
+    disposed = true;
     button?.removeEventListener('click', handleSubmit);
   };
 }

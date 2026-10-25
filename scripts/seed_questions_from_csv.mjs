@@ -8,7 +8,7 @@ function escapeSql(str) {
 }
 
 function generateSeedSql() {
-  const defaultPath = path.resolve(process.cwd(), 'public', 'crescendo-questions.csv');
+  const defaultPath = path.resolve(process.cwd(), 'questions', 'crescendo-questions.csv');
   const targetPath = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : defaultPath;
 
   if (!fs.existsSync(targetPath)) {

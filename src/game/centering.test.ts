@@ -23,7 +23,7 @@ describe('PART 3 — Camera & Car Centering Verification', () => {
 
       for (let frame = 0; frame < 600; frame++) {
         // Vary steering inputs: alternating straight, left, right, and sharp turns
-        let steer = 0;
+        let steer: number;
         if (frame % 120 < 30) {
           steer = 1; // full right
         } else if (frame % 120 >= 30 && frame % 120 < 60) {

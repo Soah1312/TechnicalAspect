@@ -21,7 +21,6 @@ function simulateIdealLap(trackPoints: any[]): number {
   
   const N = trackPoints.length;
   let elapsedMs = 0;
-  let maxProgressIndex = 0;
   let hasPassedMidpoint = false;
   
   const mockTrack = {

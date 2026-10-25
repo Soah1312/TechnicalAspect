@@ -1,4 +1,3 @@
-import { stateMachine } from '../../game/stateMachine';
 
 export function renderClosedScreen(container: HTMLElement): () => void {
   container.innerHTML = `
@@ -26,7 +25,7 @@ export function renderClosedScreen(container: HTMLElement): () => void {
 
   const btn = container.querySelector('#recheck-closed-btn') as HTMLButtonElement | null;
   btn?.addEventListener('click', () => {
-    stateMachine.transition('LOADING');
+    window.location.reload();
   });
 
   return () => {};

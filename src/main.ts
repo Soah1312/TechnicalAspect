@@ -66,7 +66,8 @@ async function bootstrap() {
   appContainer.appendChild(landscapeOverlay);
 
   const checkOrientation = () => {
-    const isLandscape = window.innerWidth > window.innerHeight && window.innerHeight < 550;
+    const desktopFrame = window.matchMedia('(min-width: 768px) and (hover: hover) and (pointer: fine)').matches;
+    const isLandscape = !desktopFrame && window.innerWidth > window.innerHeight && window.innerHeight < 550;
     landscapeOverlay.style.display = isLandscape ? 'flex' : 'none';
     const raceScene = game.scene.getScene('RaceScene') as RaceScene | undefined;
     if (raceScene) {

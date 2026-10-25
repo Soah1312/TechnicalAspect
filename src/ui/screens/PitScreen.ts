@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../util/html';
 import type { GameApi, GameConfig, Question } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { sounds } from '../../audio/soundManager';
@@ -22,6 +23,9 @@ export function renderPitScreen(
   // Mark pit entered for anti-refresh abuse protection
   pitManager.markEnteredPit();
 
+  let disposed = false;
+  let lockoutTimer: number | undefined;
+  let resumeTimer: number | undefined;
   let currentQuestion: Question | null = null;
   let isSubmitting = false;
   let isLockedOut = false;
@@ -87,6 +91,7 @@ export function renderPitScreen(
 
   // Race is continuously open: pit stops remain active without interruption
   const loadQuestion = async () => {
+    if (disposed) return;
     isSubmitting = false;
     isLockedOut = false;
     if (statusBanner) statusBanner.innerHTML = '';
@@ -95,7 +100,7 @@ export function renderPitScreen(
 
     try {
       currentQuestion = await pitManager.fetchQuestion();
-      if (!currentQuestion) return;
+      if (disposed || !currentQuestion) return;
 
       if (qTextEl) {
         qTextEl.textContent = currentQuestion.text;
@@ -124,7 +129,7 @@ export function renderPitScreen(
           .map(
             (opt, idx) => `
           <button class="option-btn" data-index="${idx}" style="font-size:10px; padding:12px 10px;">
-            <span class="highlight" style="margin-right:6px;">${['A', 'B', 'C', 'D'][idx]}.</span> ${opt}
+            <span class="highlight" style="margin-right:6px;">${['A', 'B', 'C', 'D'][idx]}.</span> ${escapeHtml(opt)}
           </button>
         `
           )
@@ -144,6 +149,7 @@ export function renderPitScreen(
       questionStart = Date.now();
       startQuestionCountdown();
     } catch (err: unknown) {
+      if (disposed) return;
       console.error('[PitScreen] fetchQuestion error:', err);
       const errMsg = err instanceof Error ? err.message : 'FAILED TO LOAD QUESTION';
       if (qTextEl) {
@@ -210,11 +216,12 @@ export function renderPitScreen(
 
     try {
       const result = await pitManager.answerQuestion(currentQuestion.questionId, -1);
+      if (disposed) return;
       
       // Reveal correct option if present
       if (result.correctIndex !== undefined && buttons?.[result.correctIndex]) {
         const correctBtn = buttons[result.correctIndex] as HTMLButtonElement;
-        correctBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${currentQuestion.options[result.correctIndex]}`;
+        correctBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${escapeHtml(currentQuestion.options[result.correctIndex])}`;
         correctBtn.className = 'option-btn reveal-correct';
       }
 
@@ -225,12 +232,12 @@ export function renderPitScreen(
               <div style="color:var(--wrong-red); font-size:9px; margin-bottom:3px; font-weight:bold;">TIME UP!</div>
               ${result.correctIndex !== undefined ? `
                 <div style="color:var(--correct-green); font-size:8px; margin-bottom:3px;">
-                  CORRECT: ${currentQuestion?.options[result.correctIndex]}
+                  CORRECT: ${escapeHtml(currentQuestion?.options[result.correctIndex])}
                 </div>
               ` : ''}
               ${result.explanation ? `
                 <div style="color:#ffffff; font-size:7px; font-weight:normal; opacity:0.9; margin-bottom:3px;">
-                  ${result.explanation}
+                  ${escapeHtml(result.explanation)}
                 </div>
               ` : ''}
               <div style="font-size:7px; color:var(--cyan);">LOCKOUT: ${lockoutRemaining}s...</div>
@@ -241,7 +248,7 @@ export function renderPitScreen(
 
       updateLockoutBanner();
 
-      const lockoutTimer = window.setInterval(() => {
+      lockoutTimer = window.setInterval(() => {
         lockoutRemaining--;
         if (lockoutRemaining <= 0) {
           window.clearInterval(lockoutTimer);
@@ -251,6 +258,7 @@ export function renderPitScreen(
         }
       }, 1000);
     } catch {
+      if (disposed) return;
       loadQuestion();
     }
   };
@@ -271,11 +279,12 @@ export function renderPitScreen(
 
     try {
       const result = await pitManager.answerQuestion(currentQuestion.questionId, index);
+      if (disposed) return;
 
       if (result.correct) {
         if (selectedBtn) {
           selectedBtn.className = 'option-btn selected-correct';
-          selectedBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${currentQuestion.options[index]}`;
+          selectedBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${escapeHtml(currentQuestion.options[index])}`;
         }
         sounds.playCorrect();
         Vibration.correct();
@@ -317,21 +326,22 @@ export function renderPitScreen(
         // Show floating fuel cue
         showFloatingFuelCue(Math.round(fuelToAdd / 1000));
 
-        window.setTimeout(() => {
+        resumeTimer = window.setTimeout(() => {
+          if (disposed) return;
           cleanup();
           stateMachine.transition('RACING');
         }, 650);
       } else {
         if (selectedBtn) {
           selectedBtn.className = 'option-btn selected-wrong';
-          selectedBtn.innerHTML = `<span class="answer-icon wrong">✖</span> ${currentQuestion.options[index]}`;
+          selectedBtn.innerHTML = `<span class="answer-icon wrong">✖</span> ${escapeHtml(currentQuestion.options[index])}`;
         }
         
         // Highlight correct answer in green
         if (result.correctIndex !== undefined && buttons?.[result.correctIndex]) {
           const correctBtn = buttons[result.correctIndex] as HTMLButtonElement;
           correctBtn.className = 'option-btn reveal-correct';
-          correctBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${currentQuestion.options[result.correctIndex]}`;
+          correctBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${escapeHtml(currentQuestion.options[result.correctIndex])}`;
         }
 
         sounds.playWrong();
@@ -346,12 +356,12 @@ export function renderPitScreen(
                 <div style="color:var(--wrong-red); font-size:9px; margin-bottom:3px; font-weight:bold;">WRONG ANSWER</div>
                 ${result.correctIndex !== undefined ? `
                   <div style="color:var(--correct-green); font-size:8px; margin-bottom:3px;">
-                    CORRECT: ${currentQuestion?.options[result.correctIndex]}
+                    CORRECT: ${escapeHtml(currentQuestion?.options[result.correctIndex])}
                   </div>
                 ` : ''}
                 ${result.explanation ? `
                   <div style="color:#ffffff; font-size:7px; font-weight:normal; opacity:0.9; margin-bottom:3px;">
-                    ${result.explanation}
+                    ${escapeHtml(result.explanation)}
                   </div>
                 ` : ''}
                 <div style="font-size:7px; color:var(--cyan);">LOCKOUT: ${lockoutRemaining}s...</div>
@@ -362,7 +372,7 @@ export function renderPitScreen(
 
         updateWrongBanner();
 
-        const lockoutTimer = window.setInterval(() => {
+        lockoutTimer = window.setInterval(() => {
           lockoutRemaining--;
           if (lockoutRemaining <= 0) {
             window.clearInterval(lockoutTimer);
@@ -373,6 +383,7 @@ export function renderPitScreen(
         }, 1000);
       }
     } catch {
+      if (disposed) return;
       isSubmitting = false;
       if (statusBanner) {
         statusBanner.innerHTML = `
@@ -408,6 +419,9 @@ export function renderPitScreen(
   };
 
   const cleanup = () => {
+    disposed = true;
+    window.clearInterval(lockoutTimer);
+    window.clearTimeout(resumeTimer);
     if (questionTimer !== null) {
       window.clearInterval(questionTimer);
       questionTimer = null;

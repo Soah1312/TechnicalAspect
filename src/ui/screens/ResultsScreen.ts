@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../util/html';
 import type { GameApi } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
@@ -13,6 +14,8 @@ export function renderResultsScreen(
 ): () => void {
   const { api } = props;
   const player = Storage.getPlayer();
+  let disposed = false;
+  let pollTimer: number | undefined;
 
   container.innerHTML = `
     <div class="screen-layer">
@@ -30,7 +33,7 @@ export function renderResultsScreen(
         <!-- Player Stat Summary -->
         <div class="retro-panel" style="width:100%; margin-top: 8px;">
           <p class="retro-text highlight" style="margin-bottom: 8px;">
-            ${player?.name || 'RACER'}${player?.year || player?.branch ? ` <span class="cyan-text" style="font-size:8px;">[${player.year || ''} ${player.branch || ''}]</span>` : ''}
+            ${escapeHtml(player?.name || 'RACER')}${player?.year || player?.branch ? ` <span class="cyan-text" style="font-size:8px;">[${escapeHtml(player.year || '')} ${escapeHtml(player.branch || '')}]</span>` : ''}
           </p>
           <div style="display:flex; justify-content:space-around; text-align:center;">
             <div>
@@ -90,6 +93,7 @@ export function renderResultsScreen(
   const loadLeaderboard = async () => {
     try {
       const snap = await api.getLeaderboard();
+      if (disposed) return;
 
       if (snap.me) {
         if (rankEl) rankEl.textContent = `#${snap.me.rank}`;
@@ -109,7 +113,10 @@ export function renderResultsScreen(
         }
       }
       if (totalRacersEl) {
-        totalRacersEl.textContent = `${snap.totalPlayers} DRIVERS`;
+        totalRacersEl.textContent = snap.isStale ? 'STALE — RETRYING...' : `${snap.totalPlayers} DRIVERS`;
+      }
+      if (friendlyMsgEl && (!snap.me || snap.isStale)) {
+        friendlyMsgEl.textContent = snap.isStale ? 'RANKINGS UNAVAILABLE — RECONNECTING...' : 'THANKS FOR RACING!';
       }
 
       if (boardEl) {
@@ -132,7 +139,7 @@ export function renderResultsScreen(
                 <tr class="${row.isMe ? 'my-row' : ''}">
                   <td>#${row.rank}</td>
                   <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px;">
-                    ${row.name}
+                    ${escapeHtml(row.name)}
                   </td>
                   <td style="text-align:right;">${row.laps}</td>
                   <td style="text-align:right;">${row.correct}</td>
@@ -152,7 +159,7 @@ export function renderResultsScreen(
                 <tr class="my-row">
                   <td>#${snap.me.rank}</td>
                   <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px;">
-                    ${snap.me.name}
+                    ${escapeHtml(snap.me.name)}
                   </td>
                   <td style="text-align:right;">${snap.me.laps}</td>
                   <td style="text-align:right;">${snap.me.correct}</td>
@@ -165,15 +172,19 @@ export function renderResultsScreen(
         `;
       }
     } catch {
+      if (disposed) return;
       if (boardEl) {
         boardEl.innerHTML = `<p class="retro-text red-text" style="font-size:8px;">LEADERBOARD OFFLINE</p>`;
       }
+    } finally {
+      if (!disposed) pollTimer = window.setTimeout(loadLeaderboard, 5000);
     }
   };
 
   loadLeaderboard();
 
   return () => {
-    // Cleanup
+    disposed = true;
+    window.clearTimeout(pollTimer);
   };
 }

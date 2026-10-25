@@ -1,6 +1,4 @@
 export const BASE_LOGICAL_WIDTH = 360;
-export const MIN_LOGICAL_HEIGHT = 560;
-export const MAX_LOGICAL_HEIGHT = 860;
 
 export function calculateLogicalHeight(
   viewportWidth?: number,
@@ -19,5 +17,5 @@ export function calculateLogicalHeight(
       : 640);
 
   const calculated = Math.round((BASE_LOGICAL_WIDTH * h) / Math.max(1, w));
-  return Math.min(MAX_LOGICAL_HEIGHT, Math.max(MIN_LOGICAL_HEIGHT, calculated));
+  return Math.max(1, calculated);
 }

@@ -41,8 +41,8 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(3, 2, 14, 30);
 
       // Dark Outline / Detailing
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
       ctx.strokeRect(3.5, 2.5, 13, 29);
 
       // Front bumper / Hood scoop
@@ -51,7 +51,7 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(13, 2, 3, 2); // right headlight
 
       // Windshield (cyan tinted retro glass)
-      ctx.fillStyle = '#00e5ff';
+      ctx.fillStyle = PALETTE.cyan;
       ctx.fillRect(5, 10, 10, 6);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(6, 11, 2, 4); // glass reflection
@@ -65,7 +65,7 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(6, 22, 8, 3);
 
       // Rear Spoiler / Taillights
-      ctx.fillStyle = '#ff2e4d';
+      ctx.fillStyle = PALETTE.wrongRed;
       ctx.fillRect(4, 30, 3, 2); // left tail
       ctx.fillRect(13, 30, 3, 2); // right tail
 

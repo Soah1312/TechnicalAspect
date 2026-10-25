@@ -247,15 +247,15 @@ export class Track {
     ctx.fillStyle = PALETTE.grass;
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
-    // Subtle grass texture grain
-    ctx.fillStyle = '#17652e';
-    for (let y = 0; y < WORLD_HEIGHT; y += 48) {
-      for (let x = 0; x < WORLD_WIDTH; x += 48) {
-        if ((x + y) % 96 === 0) {
-          ctx.fillRect(x + 8, y + 8, 4, 4);
-          ctx.fillRect(x + 24, y + 32, 3, 3);
-        }
-      }
+    // Low-contrast, irregular turf patches; no dotted grid or scanline pattern.
+    let seed = 173;
+    for (let i = 0; i < 8000; i++) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      const x = seed % WORLD_WIDTH;
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      const y = seed % WORLD_HEIGHT;
+      ctx.fillStyle = i % 2 ? 'rgba(220,235,210,0.025)' : 'rgba(10,25,20,0.04)';
+      ctx.fillRect(x, y, 12 + i % 20, 4 + i % 7);
     }
 
     const N = this.points.length;
@@ -274,28 +274,24 @@ export class Track {
     ctx.closePath();
     ctx.stroke();
 
-    // 3. Red and White Kerbs (alternating on outer and inner edges)
-    const kerbThickness = 6;
-    for (let i = 0; i < N; i++) {
-      const pt = this.points[i];
-      const isRed = Math.floor(i / 3) % 2 === 0;
-      ctx.fillStyle = isRed ? PALETTE.kerbRed : PALETTE.kerbWhite;
-
-      // Right edge kerb
-      const rx = pt.pos.x + pt.normal.x * (ROAD_HALF_WIDTH + kerbThickness / 2);
-      const ry = pt.pos.y + pt.normal.y * (ROAD_HALF_WIDTH + kerbThickness / 2);
-      ctx.fillRect(rx - 3, ry - 3, 6, 6);
-
-      // Left edge kerb
-      const lx = pt.pos.x - pt.normal.x * (ROAD_HALF_WIDTH + kerbThickness / 2);
-      const ly = pt.pos.y - pt.normal.y * (ROAD_HALF_WIDTH + kerbThickness / 2);
-      ctx.fillRect(lx - 3, ly - 3, 6, 6);
+    // Continuous pale edge lines keep the road silhouette clean.
+    for (const side of [-1, 1]) {
+      ctx.strokeStyle = PALETTE.kerbWhite;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      this.points.forEach((point, index) => {
+        const x = point.pos.x + point.normal.x * (ROAD_HALF_WIDTH - 3) * side;
+        const y = point.pos.y + point.normal.y * (ROAD_HALF_WIDTH - 3) * side;
+        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.stroke();
     }
 
     // 4. Dashed Centerline
     ctx.strokeStyle = PALETTE.accentYellow;
     ctx.lineWidth = 3;
-    ctx.setLineDash([16, 16]);
+    ctx.setLineDash([24, 24]);
     ctx.beginPath();
     ctx.moveTo(this.points[0].pos.x, this.points[0].pos.y);
     for (let i = 1; i < N; i++) {
@@ -375,12 +371,7 @@ export class Track {
     const ctx = mini.getContext('2d');
     if (!ctx) return mini;
 
-    // Minimap dark background
-    ctx.fillStyle = 'rgba(11, 11, 30, 0.85)';
-    ctx.fillRect(0, 0, 80, 80);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, 78, 78);
+    ctx.clearRect(0, 0, 80, 80);
 
     // Scale from world coords to 80x80 (with 6px padding)
     const pad = 6;

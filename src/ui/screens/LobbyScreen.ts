@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../util/html';
 import type { GameConfig, PlayerState } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { serverNow } from '../../util/clock';
@@ -35,7 +36,7 @@ export function renderLobbyScreen(
         <div class="retro-panel" style="max-width: 300px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
             <span class="retro-text highlight">RACER:</span>
-            <span class="retro-text" style="color: ${carColor};">${player?.name || 'GUEST DRIVER'}</span>
+            <span class="retro-text" style="color: ${carColor};">${escapeHtml(player?.name || 'GUEST DRIVER')}</span>
           </div>
           ${
             player?.year || player?.branch

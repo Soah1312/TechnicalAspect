@@ -424,7 +424,10 @@ export function generateTrack(lapNumber: number): GeneratedTrack {
   }
 
   // Fallback to hand-authored track if procedural attempts fail
-  const fallbackRaw = getHandAuthoredFallback(level);
+  // Rotate the authored circuits by lap, including beyond the difficulty cap.
+  // A failed procedural attempt must not repeat the same map on consecutive laps.
+  const fallbackLevels = [1, 3, 5, 8];
+  const fallbackRaw = getHandAuthoredFallback(fallbackLevels[(Math.max(1, Math.floor(lapNumber)) - 1) % fallbackLevels.length]);
   const fallbackScaled: Point2D[] = fallbackRaw.map(([x, y]) => ({
     x: x * TRACK_SCALE,
     y: y * TRACK_SCALE,
