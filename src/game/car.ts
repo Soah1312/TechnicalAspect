@@ -101,8 +101,10 @@ export class Car {
       this.forwardSpeed = Math.max(0, this.forwardSpeed - decel * dt);
     }
 
-    // 3. Steering rate scales with speed and relaxes slightly at high speed multiplier (preventing twitchiness)
-    const speedFactor = Math.min(1.0, Math.max(0.1, this.forwardSpeed / 70));
+    // 3. Steering rate scales with speed and relaxes slightly at high speed multiplier
+    // Allow responsive steering even at low speeds or when offroad so cars never get stuck
+    const minTurnFactor = this.onRoad ? 0.6 : 0.85;
+    const speedFactor = Math.min(1.0, Math.max(minTurnFactor, this.forwardSpeed / 70));
     const relaxedTurnFactor = speedMultiplier > 1 ? 1 / Math.sqrt(speedMultiplier) : 1.0;
     const turnRate = steerInput * (Car.MAX_TURN_RATE * relaxedTurnFactor) * speedFactor;
     this.heading += turnRate * dt;
@@ -127,10 +129,22 @@ export class Car {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    // Keep car within world bounds
-    const margin = 30;
-    this.x = Math.max(margin, Math.min(WORLD_WIDTH - margin, this.x));
-    this.y = Math.max(margin, Math.min(WORLD_HEIGHT - margin, this.y));
+    // Keep car within world bounds and bounce gently off margins to prevent sticky boundaries
+    const margin = 40;
+    if (this.x <= margin) {
+      this.x = margin;
+      this.vx = Math.abs(this.vx) * 0.4;
+    } else if (this.x >= WORLD_WIDTH - margin) {
+      this.x = WORLD_WIDTH - margin;
+      this.vx = -Math.abs(this.vx) * 0.4;
+    }
+    if (this.y <= margin) {
+      this.y = margin;
+      this.vy = Math.abs(this.vy) * 0.4;
+    } else if (this.y >= WORLD_HEIGHT - margin) {
+      this.y = WORLD_HEIGHT - margin;
+      this.vy = -Math.abs(this.vy) * 0.4;
+    }
   }
 
   // Reusable telemetry object to prevent GC churn in RAF loop

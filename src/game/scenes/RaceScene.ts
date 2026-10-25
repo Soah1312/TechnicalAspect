@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Track, WORLD_WIDTH, WORLD_HEIGHT } from '../track';
+import { Track, ROAD_HALF_WIDTH, WORLD_WIDTH, WORLD_HEIGHT } from '../track';
 import { generateTrack } from '../tracks/generator';
 import { Car } from '../car';
 import { FuelSystem } from '../fuel';
@@ -27,6 +27,7 @@ export class RaceScene extends Phaser.Scene {
   private carSprite: Phaser.GameObjects.Sprite | null = null;
   private trackImage: Phaser.GameObjects.Image | null = null;
   public isRaceActive = false;
+  private offroadTimer = 0;
 
   // Reusable vectors to eliminate GC pressure in RAF loop
   private readonly _carPos = { x: 0, y: 0 };
@@ -149,6 +150,10 @@ export class RaceScene extends Phaser.Scene {
       this.isRaceActive = newState === 'RACING';
       if (this.isRaceActive) {
         sounds.startEngine();
+        // If resuming from pit while stranded offroad, instantly recover onto track
+        if (this.car && this.track && !this.car.onRoad) {
+          this.recoverCarToTrack(false);
+        }
       } else {
         sounds.stopEngine();
       }
@@ -301,6 +306,20 @@ export class RaceScene extends Phaser.Scene {
       this.car.update(dt, steerInput, hasFuel, this.track, speedMultiplier);
       this.fuelSystem.update(deltaMs, this.car.speed);
 
+      // Auto-recover if stranded in grass, deep offroad, or touching boundary
+      if (!this.car.onRoad) {
+        this.offroadTimer += dt;
+        const nearest = this.track.findNearestPoint(this.car.x, this.car.y, this.car.nearestTrackIndex);
+        const margin = 50;
+        const isNearBoundary = this.car.x <= margin || this.car.x >= WORLD_WIDTH - margin ||
+                               this.car.y <= margin || this.car.y >= WORLD_HEIGHT - margin;
+        if (this.offroadTimer > 1.8 || nearest.distance > ROAD_HALF_WIDTH + 80 || isNearBoundary) {
+          this.recoverCarToTrack(true);
+        }
+      } else {
+        this.offroadTimer = 0;
+      }
+
       // Reused coordinate vectors (0 heap allocations)
       this._carPos.x = this.car.x;
       this._carPos.y = this.car.y;
@@ -345,6 +364,30 @@ export class RaceScene extends Phaser.Scene {
 
     if (this.isDebugLayout) {
       this.renderDebugLayout(curDev);
+    }
+  }
+
+  public recoverCarToTrack(showToast = true): void {
+    if (!this.track || !this.car) return;
+    const nearest = this.track.findNearestPoint(this.car.x, this.car.y);
+    this.car.x = nearest.point.pos.x;
+    this.car.y = nearest.point.pos.y;
+    this.car.heading = Math.atan2(nearest.point.tangent.y, nearest.point.tangent.x);
+    this.car.vx = 0;
+    this.car.vy = 0;
+    this.car.forwardSpeed = 50;
+    this.car.onRoad = true;
+    this.car.nearestTrackIndex = nearest.point.index;
+    this.offroadTimer = 0;
+
+    if (this.carSprite) {
+      this.carSprite.setPosition(this.car.x, this.car.y);
+      this.carSprite.setRotation(this.car.heading + Math.PI / 2);
+    }
+
+    if (showToast) {
+      const toast = (window as any).__showHudToast;
+      if (toast) toast('⚠️ RECOVERED TO TRACK');
     }
   }
 
