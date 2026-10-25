@@ -5,6 +5,7 @@ import { sounds } from '../../audio/soundManager';
 import { Vibration } from '../../util/vibration';
 import { PitManager } from '../../game/pit';
 import type { RaceScene } from '../../game/scenes/RaceScene';
+import { ICONS } from '../icons';
 
 interface PitScreenProps {
   api: GameApi;
@@ -221,7 +222,7 @@ export function renderPitScreen(
       // Reveal correct option if present
       if (result.correctIndex !== undefined && buttons?.[result.correctIndex]) {
         const correctBtn = buttons[result.correctIndex] as HTMLButtonElement;
-        correctBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${escapeHtml(currentQuestion.options[result.correctIndex])}`;
+        correctBtn.innerHTML = `<span class="answer-icon correct" style="display:inline-flex; align-items:center;">${ICONS.check(12, 'var(--correct-green)')}</span> ${escapeHtml(currentQuestion.options[result.correctIndex])}`;
         correctBtn.className = 'option-btn reveal-correct';
       }
 
@@ -284,7 +285,7 @@ export function renderPitScreen(
       if (result.correct) {
         if (selectedBtn) {
           selectedBtn.className = 'option-btn selected-correct';
-          selectedBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${escapeHtml(currentQuestion.options[index])}`;
+          selectedBtn.innerHTML = `<span class="answer-icon correct" style="display:inline-flex; align-items:center;">${ICONS.check(12, 'var(--correct-green)')}</span> ${escapeHtml(currentQuestion.options[index])}`;
         }
         sounds.playCorrect();
         Vibration.correct();
@@ -334,14 +335,14 @@ export function renderPitScreen(
       } else {
         if (selectedBtn) {
           selectedBtn.className = 'option-btn selected-wrong';
-          selectedBtn.innerHTML = `<span class="answer-icon wrong">✖</span> ${escapeHtml(currentQuestion.options[index])}`;
+          selectedBtn.innerHTML = `<span class="answer-icon wrong" style="display:inline-flex; align-items:center;">${ICONS.close(12, 'var(--wrong-red)')}</span> ${escapeHtml(currentQuestion.options[index])}`;
         }
         
         // Highlight correct answer in green
         if (result.correctIndex !== undefined && buttons?.[result.correctIndex]) {
           const correctBtn = buttons[result.correctIndex] as HTMLButtonElement;
           correctBtn.className = 'option-btn reveal-correct';
-          correctBtn.innerHTML = `<span class="answer-icon correct">✔</span> ${escapeHtml(currentQuestion.options[result.correctIndex])}`;
+          correctBtn.innerHTML = `<span class="answer-icon correct" style="display:inline-flex; align-items:center;">${ICONS.check(12, 'var(--correct-green)')}</span> ${escapeHtml(currentQuestion.options[result.correctIndex])}`;
         }
 
         sounds.playWrong();

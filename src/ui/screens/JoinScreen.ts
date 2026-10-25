@@ -3,6 +3,7 @@ import type { GameApi, Branch, Year } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
 import { sounds } from '../../audio/soundManager';
+import { ICONS } from '../icons';
 
 const BRANCHES: Branch[] = ['COMPS', 'CSE', 'ECS', 'MECH', 'AIDS'];
 const YEARS: Year[] = [1, 2, 3, 4];
@@ -92,7 +93,7 @@ export function renderJoinScreen(
             START ENGINE
           </button>
           <a href="/leaderboard" id="join-leaderboard-link" class="retro-btn btn-secondary" style="text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px; font-size:10px;">
-            🏆 FULL LEADERBOARD
+            ${ICONS.trophy(14, 'var(--accent-yellow)')} <span>FULL LEADERBOARD</span>
           </a>
         </div>
 

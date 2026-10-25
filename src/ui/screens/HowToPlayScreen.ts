@@ -1,6 +1,7 @@
 import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
 import { sounds } from '../../audio/soundManager';
+import { ICONS } from '../icons';
 
 interface CardInfo {
   icon: string;
@@ -11,19 +12,19 @@ interface CardInfo {
 
 const CARDS: CardInfo[] = [
   {
-    icon: '🏎️',
+    icon: ICONS.car(42, 'var(--cyan)'),
     title: '1. AUTO-ACCEL & STEER',
     description: 'The car auto-accelerates while it has fuel! Hold LEFT or RIGHT to steer smoothly through corners.',
     hint: '(Touch left/right sides or use A / D / Arrow keys)',
   },
   {
-    icon: '⛽',
+    icon: ICONS.fuel(42, 'var(--wrong-red)'),
     title: '2. FUEL IS TIME',
     description: 'Fuel drains continuously as you drive. If it runs out, your car rolls to a halt!',
     hint: '(10 seconds of pure driving on a full tank)',
   },
   {
-    icon: '💡',
+    icon: ICONS.lightbulb(42, 'var(--accent-yellow)'),
     title: '3. QUIZ TO REFUEL',
     description: 'Run out of fuel? Answer a question to get +10 seconds.',
     hint: '(Correct answer adds +10s fuel)',

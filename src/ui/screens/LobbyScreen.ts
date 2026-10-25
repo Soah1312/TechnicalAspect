@@ -4,6 +4,7 @@ import { stateMachine } from '../../game/stateMachine';
 import { serverNow } from '../../util/clock';
 import { sounds } from '../../audio/soundManager';
 import { PALETTE } from '../../config/constants';
+import { ICONS } from '../icons';
 
 function getCarColor(playerId: string): string {
   let hash = 0;
@@ -62,8 +63,8 @@ export function renderLobbyScreen(
         </div>
 
         <div style="display:flex; justify-content:center; gap: 10px; width: 100%;">
-          <button id="lobby-mute-btn" class="sound-toggle-btn">
-            ${sounds.isMuted() ? '🔇 MUTED' : '🔊 SOUND ON'}
+          <button id="lobby-mute-btn" class="sound-toggle-btn" style="display:inline-flex; align-items:center; gap:6px;">
+            ${sounds.isMuted() ? ICONS.volumeMute(14) : ICONS.volumeOn(14)} <span>${sounds.isMuted() ? 'MUTED' : 'SOUND ON'}</span>
           </button>
         </div>
 
@@ -81,7 +82,7 @@ export function renderLobbyScreen(
     sounds.unlock();
     const muted = sounds.toggleMute();
     if (muteBtn) {
-      muteBtn.textContent = muted ? '🔇 MUTED' : '🔊 SOUND ON';
+      muteBtn.innerHTML = `${muted ? ICONS.volumeMute(14) : ICONS.volumeOn(14)} <span>${muted ? 'MUTED' : 'SOUND ON'}</span>`;
     }
   });
 

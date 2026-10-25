@@ -2,6 +2,7 @@ import { escapeHtml } from '../../util/html';
 import type { GameApi } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
+import { ICONS } from '../icons';
 
 interface ResultsScreenProps {
   api: GameApi;
@@ -22,8 +23,8 @@ export function renderResultsScreen(
       <div class="scanlines"></div>
       <div class="screen-content" style="justify-content: flex-start; overflow-y: auto; padding-top: 10px;">
         <div style="width:100%; text-align:center;">
-          <h1 class="retro-title" style="color:var(--correct-green); font-size:16px;">
-            🏁 RACE FINISHED! 🏁
+          <h1 class="retro-title" style="color:var(--correct-green); font-size:16px; display:flex; align-items:center; justify-content:center; gap:8px;">
+            ${ICONS.flag(16, 'var(--correct-green)')} <span>RACE FINISHED!</span> ${ICONS.flag(16, 'var(--correct-green)')}
           </h1>
           <p id="res-friendly-msg" class="retro-text cyan-text" style="font-size:8px; margin-top:4px;">
             CALCULATING FLASHMOB HONORS...
@@ -74,7 +75,7 @@ export function renderResultsScreen(
             RACE AGAIN
           </button>
           <a href="/leaderboard" class="retro-btn btn-secondary" style="text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px; font-size:10px;">
-            🏆 VIEW FULL LEADERBOARD
+            ${ICONS.trophy(14, 'var(--accent-yellow)')} <span>VIEW FULL LEADERBOARD</span>
           </a>
         </div>
       </div>
@@ -107,13 +108,13 @@ export function renderResultsScreen(
 
         if (friendlyMsgEl) {
           if (snap.me.rank === 1) {
-            friendlyMsgEl.textContent = '🏆 FLASHMOB CHAMPION! UNSTOPPABLE SPEED!';
+            friendlyMsgEl.textContent = 'FLASHMOB CHAMPION! UNSTOPPABLE SPEED!';
           } else if (snap.me.rank <= 3) {
-            friendlyMsgEl.textContent = '🥈 PODIUM FINISH! INCREDIBLE PERFORMANCE!';
+            friendlyMsgEl.textContent = 'PODIUM FINISH! INCREDIBLE PERFORMANCE!';
           } else if (snap.me.rank <= 10) {
-            friendlyMsgEl.textContent = '⚡ TOP 10 RACER! EPIC SPEED & REFUELS!';
+            friendlyMsgEl.textContent = 'TOP 10 RACER! EPIC SPEED & REFUELS!';
           } else {
-            friendlyMsgEl.textContent = '🏁 AWESOME RUN! THANKS FOR JOINING THE FLASHMOB!';
+            friendlyMsgEl.textContent = 'AWESOME RUN! THANKS FOR JOINING THE FLASHMOB!';
           }
         }
       }

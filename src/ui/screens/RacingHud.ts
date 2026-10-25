@@ -7,6 +7,7 @@ import type { RaceScene } from '../../game/scenes/RaceScene';
 import { Car } from '../../game/car';
 import { Storage } from '../../util/storage';
 import { speedMult } from '../../shared/difficulty';
+import { ICONS } from '../icons';
 
 interface RacingHudProps {
   api: GameApi;
@@ -93,11 +94,11 @@ export function renderRacingHud(
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
               <!-- Mute Button moved inside Leaderboard Header (Part 2) -->
-              <button id="hud-mute-btn" aria-label="Toggle sound" class="sound-toggle-btn" style="padding:4px 6px; font-size:14px;">
-                ${sounds.isMuted() ? '🔇' : '🔊'}
+              <button id="hud-mute-btn" aria-label="Toggle sound" class="sound-toggle-btn" style="padding:4px 6px; font-size:14px; display:inline-flex; align-items:center; justify-content:center;">
+                ${sounds.isMuted() ? ICONS.volumeMute(16) : ICONS.volumeOn(16)}
               </button>
-              <button id="close-leaderboard-btn" class="retro-btn btn-secondary" style="width:auto; padding:4px 8px; font-size:14px;">
-                CLOSE ✕
+              <button id="close-leaderboard-btn" class="retro-btn btn-secondary" style="width:auto; padding:4px 8px; font-size:14px; display:inline-flex; align-items:center; gap:4px;">
+                <span>CLOSE</span> ${ICONS.close(12)}
               </button>
             </div>
           </div>
@@ -117,7 +118,7 @@ export function renderRacingHud(
 
           <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
             <a href="/leaderboard" target="_blank" rel="noopener noreferrer" class="retro-btn btn-cyan" style="font-size:14px; padding:6px 12px; width:auto; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
-              🏆 FULL BOARD PAGE ↗
+              ${ICONS.trophy(14, '#0b0b1e')} <span>FULL BOARD PAGE</span> ↗
             </a>
             <button id="hud-change-driver-btn" class="retro-btn btn-secondary" style="font-size:14px; padding:6px 12px; width:auto;">
               CHANGE DRIVER
@@ -196,7 +197,7 @@ export function renderRacingHud(
     sounds.unlock();
     const muted = sounds.toggleMute();
     if (muteBtn) {
-      muteBtn.textContent = muted ? '🔇' : '🔊';
+      muteBtn.innerHTML = muted ? ICONS.volumeMute(16) : ICONS.volumeOn(16);
     }
   });
 
@@ -343,7 +344,7 @@ export function renderRacingHud(
       if (disposed || version !== requestVersion || !isLeaderboardOpen) return;
       if (lbStatusTag) {
         if (snapshot.isStale) {
-          lbStatusTag.innerHTML = `⚠️ <span style="color:var(--wrong-red);">OFFLINE (CACHED DATA)</span>`;
+          lbStatusTag.innerHTML = `${ICONS.warning(14, 'var(--wrong-red)')} <span style="color:var(--wrong-red);">OFFLINE (CACHED DATA)</span>`;
         } else {
           lbStatusTag.innerHTML = `● LIVE FLASHMOB RANKINGS`;
           lbStatusTag.className = 'retro-text cyan-text';
@@ -386,9 +387,9 @@ export function renderRacingHud(
                 <span class="branch-tag branch-${escapeHtml(entry.branch?.toLowerCase() || 'comps')}" style="font-size:14px; padding: 1px 3px;">${escapeHtml(entry.branch || 'COMPS')}</span>
                 <span class="year-badge" style="font-size:14px; padding: 1px 3px;">Y${entry.year || 1}</span>
               </div>
-              <div style="display:flex; gap: 8px;">
+              <div style="display:flex; gap: 8px; align-items:center;">
                 <span class="yellow-text">L${entry.laps}</span>
-                <span class="green-text">✓${entry.correct}</span>
+                <span class="green-text" style="display:inline-flex; align-items:center; gap:2px;">${ICONS.check(10, 'var(--correct-green)')} ${entry.correct}</span>
               </div>
             </div>
           `;
@@ -405,9 +406,9 @@ export function renderRacingHud(
               <span class="yellow-text font-bold">${escapeHtml(stored?.name || 'YOU')} (YOU)</span>
               <span class="branch-tag branch-${escapeHtml(stored?.branch?.toLowerCase() || 'comps')}" style="font-size:14px; padding: 1px 3px;">${escapeHtml(stored?.branch || 'COMPS')}</span>
             </div>
-            <div style="display:flex; gap: 8px;">
+            <div style="display:flex; gap: 8px; align-items:center;">
               <span class="yellow-text">L${snapshot.me.laps ?? 0}</span>
-              <span class="green-text">✓${snapshot.me.correct ?? 0}</span>
+              <span class="green-text" style="display:inline-flex; align-items:center; gap:2px;">${ICONS.check(10, 'var(--correct-green)')} ${snapshot.me.correct ?? 0}</span>
             </div>
           </div>
         `;
@@ -417,7 +418,7 @@ export function renderRacingHud(
     } catch {
       if (disposed || version !== requestVersion || !isLeaderboardOpen) return;
       if (lbStatusTag) {
-        lbStatusTag.innerHTML = `⚠️ <span style="color:var(--wrong-red);">NETWORK OFFLINE</span>`;
+        lbStatusTag.innerHTML = `${ICONS.warning(14, 'var(--wrong-red)')} <span style="color:var(--wrong-red);">NETWORK OFFLINE</span>`;
       }
     } finally {
       if (!disposed && version === requestVersion) liveBoardContent.removeAttribute('aria-busy');
@@ -459,7 +460,7 @@ export function renderRacingHud(
             config.featureFlags?.feature_speed_ramp ?? true
           );
           if (curSpeedMult > 1.0) {
-            showHudToast(`⚡ SPEED UP! ${curSpeedMult.toFixed(2)}x`);
+            showHudToast(`SPEED UP! ${curSpeedMult.toFixed(2)}x`);
           }
         }
         prevLap = currentLap;

@@ -1,4 +1,5 @@
 export type NetworkStatus = 'online' | 'offline' | 'slow' | 'reconnected';
+import { ICONS } from '../ui/icons';
 
 type NetworkListener = (status: NetworkStatus) => void;
 
@@ -122,21 +123,21 @@ class NetworkMonitor {
       this.bannerEl.style.display = 'flex';
       this.bannerEl.className = 'network-status-banner banner-offline';
       this.bannerEl.innerHTML = `
-        <span class="banner-pulse">⚠️</span>
+        <span class="banner-pulse" style="display:inline-flex; align-items:center;">${ICONS.warning(14, '#ffffff')}</span>
         <span>OFFLINE — RECONNECTING... (LAPS SAVED)</span>
       `;
     } else if (status === 'slow') {
       this.bannerEl.style.display = 'flex';
       this.bannerEl.className = 'network-status-banner banner-slow';
       this.bannerEl.innerHTML = `
-        <span class="banner-pulse">⏳</span>
+        <span class="banner-pulse" style="display:inline-flex; align-items:center;">${ICONS.warning(14, '#000000')}</span>
         <span>NETWORK SLOW — KEEP DRIVING!</span>
       `;
     } else if (status === 'reconnected') {
       this.bannerEl.style.display = 'flex';
       this.bannerEl.className = 'network-status-banner banner-online';
       this.bannerEl.innerHTML = `
-        <span>⚡</span>
+        <span style="display:inline-flex; align-items:center;">${ICONS.bolt(14, '#000000')}</span>
         <span>RECONNECTED — TELEMETRY SYNCED!</span>
       `;
     } else {

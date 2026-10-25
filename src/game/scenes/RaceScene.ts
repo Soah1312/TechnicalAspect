@@ -185,7 +185,7 @@ export class RaceScene extends Phaser.Scene {
 
     // Toast in Part 2 toast slot
     if (showToast) {
-      showToast(`🏁 LAP ${nextLap} · NEW TRACK!`);
+      showToast(`LAP ${nextLap} · NEW TRACK!`);
     }
 
     // Seamless swap: keep car position, heading, speed, fuel
@@ -387,7 +387,7 @@ export class RaceScene extends Phaser.Scene {
 
     if (showToast) {
       const toast = (window as any).__showHudToast;
-      if (toast) toast('⚠️ RECOVERED TO TRACK');
+      if (toast) toast('RECOVERED TO TRACK');
     }
   }
 

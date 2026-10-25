@@ -2,6 +2,7 @@ import { escapeHtml } from '../../util/html';
 import type { GameApi, LeaderboardRow, Branch, Year } from '../../api/types';
 import { Storage } from '../../util/storage';
 import { sounds } from '../../audio/soundManager';
+import { ICONS } from '../icons';
 
 const BRANCHES: Branch[] = ['COMPS', 'CSE', 'ECS', 'MECH', 'AIDS'];
 const YEARS: Year[] = [1, 2, 3, 4];
@@ -60,7 +61,7 @@ export function renderLeaderboardPage(
       <header class="lb-page-header">
         <div class="lb-title-group">
           <h1 class="lb-page-title">
-            🏆 CRESCENDO FUEL RUSH
+            ${ICONS.trophy(18, 'var(--accent-yellow)')} CRESCENDO FUEL RUSH
           </h1>
           <div class="lb-page-subtitle">
             <span>OFFICIAL FLASHMOB STANDINGS</span>
@@ -80,7 +81,7 @@ export function renderLeaderboardPage(
             <span>REFRESH</span>
           </button>
           <a href="/" id="lb-play-btn" class="lb-action-btn lb-btn-play">
-            <span>🎮 PLAY / RACE</span>
+            <span style="display:inline-flex; align-items:center; gap:6px;">${ICONS.gamepad(14, '#0b0b1e')} PLAY / RACE</span>
           </a>
         </div>
       </header>
@@ -123,7 +124,7 @@ export function renderLeaderboardPage(
       <div class="lb-controls-panel">
         <div class="lb-search-row">
           <div class="lb-search-input-wrap">
-            <span class="lb-search-icon">🔍</span>
+            <span class="lb-search-icon">${ICONS.search(14, 'var(--cyan)')}</span>
             <input
               type="text"
               id="lb-search-input"
@@ -321,7 +322,7 @@ export function renderLeaderboardPage(
     podiumContainer.innerHTML = `
       <!-- 2nd Place -->
       <div class="lb-podium-card lb-podium-second">
-        <span class="lb-podium-badge">🥈</span>
+        <span class="lb-podium-badge">${ICONS.medal(2, 28)}</span>
         <span class="lb-podium-rank">#2 RANK</span>
         <span class="lb-podium-name">${escapeHtml(second.name)}</span>
         <div class="lb-podium-tags">
@@ -331,12 +332,14 @@ export function renderLeaderboardPage(
           <span class="year-pill">${formatYearShort(second.year)}</span>
         </div>
         <span class="lb-podium-score">${calculateScore(second.laps, second.correct).toLocaleString()} PTS</span>
-        <span class="lb-podium-breakdown">🏁 ${second.laps} Laps · 🎯 ${second.correct} Correct</span>
+        <span class="lb-podium-breakdown" style="display:inline-flex; align-items:center; gap:4px;">
+          ${ICONS.flag(12, 'var(--cyan)')} ${second.laps} Laps · ${ICONS.target(12, 'var(--correct-green)')} ${second.correct} Correct
+        </span>
       </div>
 
       <!-- 1st Place (Winner) -->
       <div class="lb-podium-card lb-podium-first">
-        <span class="lb-podium-badge">👑</span>
+        <span class="lb-podium-badge">${ICONS.crown(30, '#ffd700')}</span>
         <span class="lb-podium-rank">#1 CHAMPION</span>
         <span class="lb-podium-name" style="font-size: 15px; color: var(--accent-yellow);">${escapeHtml(first.name)}</span>
         <div class="lb-podium-tags">
@@ -346,12 +349,14 @@ export function renderLeaderboardPage(
           <span class="year-pill">${formatYearShort(first.year)}</span>
         </div>
         <span class="lb-podium-score" style="font-size: 20px;">${calculateScore(first.laps, first.correct).toLocaleString()} PTS</span>
-        <span class="lb-podium-breakdown">🏁 ${first.laps} Laps · 🎯 ${first.correct} Correct</span>
+        <span class="lb-podium-breakdown" style="display:inline-flex; align-items:center; gap:4px;">
+          ${ICONS.flag(12, 'var(--cyan)')} ${first.laps} Laps · ${ICONS.target(12, 'var(--correct-green)')} ${first.correct} Correct
+        </span>
       </div>
 
       <!-- 3rd Place -->
       <div class="lb-podium-card lb-podium-third">
-        <span class="lb-podium-badge">🥉</span>
+        <span class="lb-podium-badge">${ICONS.medal(3, 28)}</span>
         <span class="lb-podium-rank">#3 RANK</span>
         <span class="lb-podium-name">${escapeHtml(third.name)}</span>
         <div class="lb-podium-tags">
@@ -361,7 +366,9 @@ export function renderLeaderboardPage(
           <span class="year-pill">${formatYearShort(third.year)}</span>
         </div>
         <span class="lb-podium-score">${calculateScore(third.laps, third.correct).toLocaleString()} PTS</span>
-        <span class="lb-podium-breakdown">🏁 ${third.laps} Laps · 🎯 ${third.correct} Correct</span>
+        <span class="lb-podium-breakdown" style="display:inline-flex; align-items:center; gap:4px;">
+          ${ICONS.flag(12, 'var(--cyan)')} ${third.laps} Laps · ${ICONS.target(12, 'var(--correct-green)')} ${third.correct} Correct
+        </span>
       </div>
     `;
   };
@@ -401,13 +408,13 @@ export function renderLeaderboardPage(
         let medalIcon = '';
         if (displayRank === 1) {
           rankBadgeClass = 'lb-rank-1';
-          medalIcon = '🥇 ';
+          medalIcon = `${ICONS.medal(1, 16)} `;
         } else if (displayRank === 2) {
           rankBadgeClass = 'lb-rank-2';
-          medalIcon = '🥈 ';
+          medalIcon = `${ICONS.medal(2, 16)} `;
         } else if (displayRank === 3) {
           rankBadgeClass = 'lb-rank-3';
-          medalIcon = '🥉 ';
+          medalIcon = `${ICONS.medal(3, 16)} `;
         }
 
         const branch = entry.branch || 'COMPS';
@@ -417,7 +424,7 @@ export function renderLeaderboardPage(
         return `
           <tr class="lb-table-row ${isCurrent ? 'is-current-user' : ''}" id="driver-row-${displayRank}">
             <td class="lb-rank-cell ${rankBadgeClass}">
-              ${medalIcon}#${displayRank}
+              <div style="display:inline-flex; align-items:center; gap:4px;">${medalIcon}#${displayRank}</div>
             </td>
             <td>
               <div class="lb-driver-name">
@@ -435,8 +442,8 @@ export function renderLeaderboardPage(
               ${score.toLocaleString()} PTS
             </td>
             <td class="lb-stats-cell">
-              <span class="lb-laps-stat">🏁 ${entry.laps} Laps</span> · 
-              <span class="lb-correct-stat">🎯 ${entry.correct} Correct</span>
+              <span class="lb-laps-stat" style="display:inline-flex; align-items:center; gap:3px;">${ICONS.flag(11, 'var(--cyan)')} ${entry.laps} Laps</span> · 
+              <span class="lb-correct-stat" style="display:inline-flex; align-items:center; gap:3px;">${ICONS.target(11, 'var(--correct-green)')} ${entry.correct} Correct</span>
             </td>
           </tr>
         `;
@@ -493,12 +500,12 @@ export function renderLeaderboardPage(
         <span style="font-family: var(--font-retro); color: var(--accent-yellow); font-size: 13px;">
           ${score.toLocaleString()} PTS
         </span>
-        <span style="color: #9ea5c6; font-size: 11px;">
-          (🏁 ${myEntry.laps} Laps · 🎯 ${myEntry.correct} Quiz)
+        <span style="color: #9ea5c6; font-size: 11px; display:inline-flex; align-items:center; gap:4px;">
+          (${ICONS.flag(11, 'var(--cyan)')} ${myEntry.laps} Laps · ${ICONS.target(11, 'var(--correct-green)')} ${myEntry.correct} Quiz)
         </span>
       </div>
-      <button id="lb-scroll-to-me-btn" class="lb-pill-btn active" style="font-size: 8px; padding: 6px 12px;">
-        SCROLL TO ME ⬆
+      <button id="lb-scroll-to-me-btn" class="lb-pill-btn active" style="font-size: 8px; padding: 6px 12px; display:inline-flex; align-items:center; gap:4px;">
+        <span>SCROLL TO ME</span> ${ICONS.arrowUp(10, '#0b0b1e')}
       </button>
     `;
 
@@ -532,7 +539,7 @@ export function renderLeaderboardPage(
 
       if (statusText) {
         if (isStaleData) {
-          statusText.innerHTML = `⚠️ <span style="color:var(--wrong-red);">OFFLINE (CACHED DATA)</span>`;
+          statusText.innerHTML = `${ICONS.warning(14, 'var(--wrong-red)')} <span style="color:var(--wrong-red);">OFFLINE (CACHED DATA)</span>`;
           if (liveIndicator) {
             liveIndicator.className = 'lb-live-pulse-badge';
             liveIndicator.style.borderColor = 'var(--wrong-red)';
@@ -553,7 +560,7 @@ export function renderLeaderboardPage(
     } catch (err) {
       console.warn('[LeaderboardPage] Failed to fetch leaderboard:', err);
       if (statusText) {
-        statusText.innerHTML = `⚠️ <span style="color:var(--wrong-red);">ERROR CONNECTING</span>`;
+        statusText.innerHTML = `${ICONS.warning(14, 'var(--wrong-red)')} <span style="color:var(--wrong-red);">ERROR CONNECTING</span>`;
       }
     } finally {
       isFetching = false;

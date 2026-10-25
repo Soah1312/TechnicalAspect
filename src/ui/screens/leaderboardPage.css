@@ -52,6 +52,12 @@ body.leaderboard-page-mode #ui-container {
   box-sizing: border-box;
 }
 
+.pixel-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
 /* Header Section */
 .lb-page-header {
   display: flex;

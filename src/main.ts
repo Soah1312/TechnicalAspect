@@ -11,6 +11,7 @@ import type { RaceScene } from './game/scenes/RaceScene';
 
 import { networkMonitor } from './util/network';
 import { renderLeaderboardPage } from './ui/screens/LeaderboardPage';
+import { ICONS } from './ui/icons';
 
 async function bootstrap() {
   const uiContainer = document.getElementById('ui-container');
@@ -79,7 +80,7 @@ async function bootstrap() {
   landscapeOverlay.style.display = 'none';
   landscapeOverlay.innerHTML = `
     <div class="landscape-box">
-      <div class="rotate-phone-icon">📱↻</div>
+      <div class="rotate-phone-icon">${ICONS.phoneRotate(48, 'var(--accent-yellow)')}</div>
       <div class="retro-text highlight" style="font-size:11px; margin-bottom:8px;">ROTATE TO PORTRAIT</div>
       <p class="retro-text cyan-text" style="font-size:7px; line-height:1.5;">
         CRESCENDO FUEL RUSH IS DESIGNED EXCLUSIVELY FOR VERTICAL PORTRAIT DRIVING!
