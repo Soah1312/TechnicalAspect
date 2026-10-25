@@ -158,5 +158,27 @@ Append these query parameters to the URL for testing:
 
 ---
 
+## 🔄 Resetting Game Data (Post-Testing Clean Slate)
+
+Before opening the game for all live participants, perform two quick resets:
+
+### 1. Reset Database Leaderboard & Test Scores (Supabase)
+Run the script in [supabase/reset_game_data.sql](file:///c:/Users/soahf/Desktop/TechnicalAspect/supabase/reset_game_data.sql) in your **Supabase SQL Editor**:
+
+```sql
+TRUNCATE TABLE public.issued_questions CASCADE;
+DELETE FROM public.players;
+```
+
+*This clears all test scores, laps, and drivers, resetting the leaderboard to a fresh slate while preserving your 60 questions and game configuration.*
+
+### 2. Reset Test Phones & Browsers
+To test the clean onboarding flow on a device that already joined:
+- Simply append `?reset=1` to the URL:  
+  `https://crescendo-fuel-rush.vercel.app/?reset=1`
+- Or clear site data / local storage in browser settings.
+
+---
+
 ## 📜 License
 This project is proprietary and intended for event and academic use.
