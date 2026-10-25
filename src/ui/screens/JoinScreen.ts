@@ -87,9 +87,14 @@ export function renderJoinScreen(
           <div id="join-error" class="error-banner" style="margin-top: 8px;"></div>
         </div>
 
-        <button id="start-engine-btn" class="retro-btn btn-green" disabled>
-          START ENGINE
-        </button>
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+          <button id="start-engine-btn" class="retro-btn btn-green" disabled>
+            START ENGINE
+          </button>
+          <a href="/leaderboard" id="join-leaderboard-link" class="retro-btn btn-secondary" style="text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px; font-size:10px;">
+            🏆 FULL LEADERBOARD
+          </a>
+        </div>
 
         <p class="retro-text" style="font-size: 8px; opacity: 0.8;">
           50-100 RACERS ONLINE • AUTO-ACCELERATE • QUIZ REFUEL

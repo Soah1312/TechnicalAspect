@@ -33,7 +33,7 @@ export class SupabaseApi implements GameApi {
   private isProcessingLapQueue = false;
 
   // Last cached leaderboard for offline resilience
-  private cachedLeaderboards = new Map<Scope, LeaderboardSnapshot>();
+  private cachedLeaderboards = new Map<string, LeaderboardSnapshot>();
 
   constructor() {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -364,7 +364,8 @@ export class SupabaseApi implements GameApi {
   /**
    * Get leaderboard with limited retry and resilient fallback to cached/stale snapshot
    */
-  public async getLeaderboard(scope: Scope = 'ALL'): Promise<LeaderboardSnapshot> {
+  public async getLeaderboard(scope: Scope = 'ALL', limit = 10): Promise<LeaderboardSnapshot> {
+    const cacheKey = `${scope}_${limit}`;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         await this.ensureAuth();
@@ -372,7 +373,7 @@ export class SupabaseApi implements GameApi {
           top: LeaderboardRow[];
           me: LeaderboardRow | null;
           totalPlayers: number;
-        }>('get_leaderboard', { p_limit: 10, p_scope: scope }, 8000);
+        }>('get_leaderboard', { p_limit: limit, p_scope: scope }, 8000);
 
         const snapshot: LeaderboardSnapshot = {
           top: (data.top || []).map((r) => ({
@@ -400,6 +401,7 @@ export class SupabaseApi implements GameApi {
           scope,
         };
 
+        this.cachedLeaderboards.set(cacheKey, snapshot);
         this.cachedLeaderboards.set(scope, snapshot);
         return snapshot;
       } catch {
@@ -410,7 +412,7 @@ export class SupabaseApi implements GameApi {
     }
 
     // Network slow, offline, or timed out: return cached leaderboard with stale flag
-    const cached = this.cachedLeaderboards.get(scope);
+    const cached = this.cachedLeaderboards.get(cacheKey) || this.cachedLeaderboards.get(scope);
     if (cached) {
       console.warn('[SupabaseApi] get_leaderboard returning cached snapshot with isStale=true');
       return {

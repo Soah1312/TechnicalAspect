@@ -115,9 +115,12 @@ export function renderRacingHud(
             </p>
           </div>
 
-          <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px; text-align: center;">
+          <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
+            <a href="/leaderboard" target="_blank" rel="noopener noreferrer" class="retro-btn btn-cyan" style="font-size:14px; padding:6px 12px; width:auto; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+              🏆 FULL BOARD PAGE ↗
+            </a>
             <button id="hud-change-driver-btn" class="retro-btn btn-secondary" style="font-size:14px; padding:6px 12px; width:auto;">
-              CHANGE DRIVER / CLASS
+              CHANGE DRIVER
             </button>
           </div>
         </div>

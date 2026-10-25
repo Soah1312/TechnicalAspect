@@ -69,9 +69,14 @@ export function renderResultsScreen(
           </div>
         </div>
 
-        <button id="race-again-btn" class="retro-btn btn-cyan" style="margin-top: 10px;">
-          RACE AGAIN
-        </button>
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%; margin-top: 10px;">
+          <button id="race-again-btn" class="retro-btn btn-cyan">
+            RACE AGAIN
+          </button>
+          <a href="/leaderboard" class="retro-btn btn-secondary" style="text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px; font-size:10px;">
+            🏆 VIEW FULL LEADERBOARD
+          </a>
+        </div>
       </div>
     </div>
   `;

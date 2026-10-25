@@ -10,6 +10,7 @@ import { PitManager } from './game/pit';
 import type { RaceScene } from './game/scenes/RaceScene';
 
 import { networkMonitor } from './util/network';
+import { renderLeaderboardPage } from './ui/screens/LeaderboardPage';
 
 async function bootstrap() {
   const uiContainer = document.getElementById('ui-container');
@@ -31,6 +32,28 @@ async function bootstrap() {
 
   // 2. Mount Network Status Banner
   networkMonitor.mountBanner(appContainer);
+
+  // Check if requested route is the dedicated Leaderboard page
+  const pathname = window.location.pathname.toLowerCase();
+  const search = new URLSearchParams(window.location.search);
+  const isLeaderboardRoute =
+    pathname.endsWith('/leaderboard') ||
+    pathname.endsWith('/leaderboard/') ||
+    pathname.endsWith('/leaderboard.html') ||
+    search.get('page') === 'leaderboard';
+
+  if (isLeaderboardRoute) {
+    const unlockAudio = () => {
+      sounds.unlock();
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+    window.addEventListener('pointerdown', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true });
+
+    renderLeaderboardPage(uiContainer || appContainer, activeApi);
+    return;
+  }
 
   // 3. Initialize Phaser 3 Game
   const game = createGame();

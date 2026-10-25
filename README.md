@@ -24,7 +24,17 @@ Built with **Phaser 3**, **TypeScript**, **Vite**, and backed by **Supabase** (P
    - **Escalating Difficulty**: Every completed lap loads a new, harder track with more corners, tighter radii, chicanes, and hairpins (scaling up to Level 12).
    - **Seamless Swap**: Pre-renders the next track's texture in the background while driving. On crossing the finish line, a 150 ms camera flash swaps the road, gates, and minimap with zero car hitching or speed loss.
 
-4. **Decluttered Retro HUD**:
+4. **Dedicated Live Leaderboard Page**:
+   - Standalone, projector-ready, and mobile-responsive live standings at `/leaderboard` (or `/leaderboard.html`).
+   - **Score System**: `Score = (Laps × 1,000 PTS) + (Correct Answers × 100 PTS)` alongside full driving stats.
+   - **Podium Showcase**: Top 3 racers highlighted on 👑 Gold, 🥈 Silver, and 🥉 Bronze podium stands.
+   - **Full Racer Details**: Displays Rank, Driver Name, Score, Branch (`COMPS`, `CSE`, `ECS`, `MECH`, `AIDS`), and Year (`1st` to `4th`).
+   - **Interactive Filters & Search**: Instant name search, branch tabs, year tabs, and sort toggles (Score / Laps / Quiz).
+   - **Live Auto-Refresh**: Polls authoritative telemetry every 10 seconds with a real-time countdown indicator and manual refresh.
+   - **Sticky Player Bar**: Fixed bottom standing chip highlighting personal rank and score if scrolled off-screen.
+   - Accessible directly from the browser URL, or via links on `JoinScreen`, `RacingHud`, and `ResultsScreen`.
+
+5. **Decluttered Retro HUD**:
    - Compact top strip (height $\le 40\text{ px}$, $\le 6\%$ screen height) displaying:
      - **Fuel Bar** with remaining seconds inside (pulses red when $\le 25\%$ or $\le 3\text{ s}$).
      - **Laps completed** (`L0`).
@@ -33,7 +43,7 @@ Built with **Phaser 3**, **TypeScript**, **Vite**, and backed by **Supabase** (P
    - Transient single-slot toasts (FIFO queue) for speed milestones and track changes.
    - Semi-transparent minimap positioned in the bottom-right corner.
 
-5. **Server-Authoritative Anti-Cheat & Leaderboard**:
+6. **Server-Authoritative Anti-Cheat & Leaderboard**:
    - SQL RPC functions (`join_race`, `request_question`, `answer_question`, `submit_lap`, `get_leaderboard`).
    - Enforces sequential lap progression, physical driving speed limits, minimum lap duration, and fuel balance verification.
    - Server-side anti-farming rule: prevents requesting questions faster than physical fuel burn rate after correct answers.

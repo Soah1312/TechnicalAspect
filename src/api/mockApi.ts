@@ -432,7 +432,7 @@ export class MockApi implements GameApi {
     };
   }
 
-  public async getLeaderboard(scope: Scope = 'ALL'): Promise<LeaderboardSnapshot> {
+  public async getLeaderboard(scope: Scope = 'ALL', limit = 10): Promise<LeaderboardSnapshot> {
     await this.delay();
 
     // Advance bots
@@ -497,7 +497,7 @@ export class MockApi implements GameApi {
     }));
 
     const me = ranked.find((r) => r.isMe) || null;
-    const top = ranked.slice(0, 10);
+    const top = ranked.slice(0, limit);
 
     return {
       top,

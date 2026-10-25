@@ -87,5 +87,5 @@ export interface GameApi {
   requestQuestion(): Promise<Question>;
   submitAnswer(questionId: string, optionIndex: number): Promise<AnswerResult>;
   submitLap(lapNumber: number, lapTimeMs: number): Promise<LapResult>;
-  getLeaderboard(scope?: Scope): Promise<LeaderboardSnapshot>;
+  getLeaderboard(scope?: Scope, limit?: number): Promise<LeaderboardSnapshot>;
 }
