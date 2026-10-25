@@ -7,10 +7,14 @@ import type {
   LapResult,
   LeaderboardSnapshot,
   LeaderboardRow,
+  Branch,
+  Year,
+  Scope,
 } from './types';
 import { DEFAULT_CONFIG, DEBUG_CONFIG } from '../config/constants';
 import { Storage } from '../util/storage';
 import { MOCK_QUESTIONS } from './mockQuestions';
+import { minLapMs } from '../shared/difficulty';
 
 const BOT_NAMES = [
   'TurboTuring', 'PixelRacer', 'BitDrifter', 'ByteRider', 'CyberApex',
@@ -24,6 +28,8 @@ const BOT_NAMES = [
 interface BotRecord {
   id: string;
   name: string;
+  branch: Branch;
+  year: Year;
   laps: number;
   correct: number;
   lastLapTime: number;
@@ -44,6 +50,7 @@ export class MockApi implements GameApi {
   private currentIssuedQuestion: Question | null = null;
   private lockedUntil: number | null = null;
   private fuelGrantedMsTotal = 30000;
+  private minDriveMsTotal = 0;
   private lastLapAt: number | null = null;
   private joinedAt: number = Date.now();
   private simulateDelay: boolean;
@@ -63,9 +70,20 @@ export class MockApi implements GameApi {
       questionTimeMs: DEFAULT_CONFIG.questionTimeMs,
       wrongLockoutMs: DEFAULT_CONFIG.wrongLockoutMs,
       minLapMs: DEFAULT_CONFIG.minLapMs,
+      speedStep: 0.04,
+      speedCap: 1.5,
+      lapMinFactor: 0.8,
+      branchSpecificRatio: 0.7,
+      featureFlags: {
+        feature_branch_questions: true,
+        feature_difficulty_curve: true,
+        feature_speed_ramp: true,
+        feature_track_stages: true,
+        feature_answer_reveal: true,
+      },
     };
 
-    // Initialize 30 active bots
+    // Initialize 30 active bots distributed across branches and years
     this.initBots();
 
     // Check if player already stored in local storage
@@ -74,6 +92,8 @@ export class MockApi implements GameApi {
       this.player = {
         playerId: stored.playerId,
         name: stored.name,
+        branch: (stored.branch as Branch) || 'COMPS',
+        year: (Number(stored.year) as Year) || 1,
         laps: 0,
         correct: 0,
       };
@@ -81,18 +101,25 @@ export class MockApi implements GameApi {
   }
 
   private initBots(): void {
-    this.bots = BOT_NAMES.map((name, i) => ({
-      id: `bot_${i}`,
-      name,
-      laps: Math.floor(Math.random() * 2),
-      correct: Math.floor(Math.random() * 2),
-      lastLapTime: this.creationTime - Math.random() * 30000,
-    }));
+    const branches: Branch[] = ['COMPS', 'CSE', 'ECS', 'MECH', 'AIDS'];
+    this.bots = BOT_NAMES.map((name, i) => {
+      const branch = branches[i % branches.length];
+      const year = (branch === 'AIDS' ? 4 : ((i % 4) + 1)) as Year;
+      return {
+        id: `bot_${i}`,
+        name,
+        branch,
+        year,
+        laps: Math.floor(Math.random() * 2),
+        correct: Math.floor(Math.random() * 2),
+        lastLapTime: this.creationTime - Math.random() * 30000,
+      };
+    });
   }
 
   private async delay(): Promise<void> {
     if (!this.simulateDelay) return;
-    const ms = Math.floor(Math.random() * 300) + 100; // 100 - 400 ms simulated network latency
+    const ms = Math.floor(Math.random() * 150) + 50;
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
@@ -119,11 +146,10 @@ export class MockApi implements GameApi {
 
   public async getServerTime(): Promise<number> {
     await this.delay();
-    // Simulate server time with tiny fixed skew (+45ms)
     return Date.now() + 45;
   }
 
-  public async joinRace(name: string, year?: string, branch?: string): Promise<PlayerState> {
+  public async joinRace(name: string, branch?: Branch, year?: Year): Promise<PlayerState> {
     await this.delay();
     const cleanName = name.trim();
 
@@ -140,26 +166,27 @@ export class MockApi implements GameApi {
       playerId = `usr_${Math.random().toString(36).substring(2, 9)}`;
     }
 
+    const assignedBranch: Branch = branch || this.player?.branch || 'COMPS';
+    const assignedYear: Year = (assignedBranch === 'AIDS' ? 4 : (year || this.player?.year || 1)) as Year;
+
     this.player = {
       playerId,
       name: cleanName,
-      year: year || this.player?.year,
-      branch: branch || this.player?.branch,
+      branch: assignedBranch,
+      year: assignedYear,
       laps: this.player ? this.player.laps : 0,
       correct: this.player ? this.player.correct : 0,
     };
 
-    Storage.setPlayer(playerId, cleanName, this.player.year, this.player.branch);
+    Storage.setPlayer(playerId, cleanName, String(this.player.year), this.player.branch);
     return { ...this.player };
   }
 
   /**
-   * Request a question the player has not seen yet.
-   * Shuffles options and keeps the correct index secret in the mock only.
+   * Request question using B4 algorithm with difficulty curve and branch pool
    */
   public async requestQuestion(): Promise<Question> {
     await this.delay();
-
     const now = Date.now();
 
     // Check lockout
@@ -173,48 +200,37 @@ export class MockApi implements GameApi {
       if (now - issuedAt < this.config.questionTimeMs) {
         return this.currentIssuedQuestion;
       } else {
-        // Timed out: clear and proceed to issue next question
         this.currentIssuedQuestion = null;
       }
     }
 
-    // Year-based category mapping
-    const yearCategoryMap: Record<string, string[]> = {
-      FE: ['Programming', 'History'],
-      SE: ['Programming', 'Data Structures', 'Algorithms'],
-      TE: ['Operating Systems', 'Databases', 'Networking'],
-      BE: ['Operating Systems', 'Databases', 'Networking', 'Web', 'Algorithms'],
-    };
-
-    const playerYear = this.player?.year || Storage.getPlayer()?.year;
-    const allowedCategories = playerYear && yearCategoryMap[playerYear] ? yearCategoryMap[playerYear] : null;
-
-    // Filter by year if specific question has year OR category matches student year
-    const matchesYear = (q: typeof MOCK_QUESTIONS[0]) => {
-      if (!allowedCategories) return true;
-      if (q.year) return q.year === playerYear;
-      return allowedCategories.includes(q.category);
-    };
-
-    // Find available questions not yet seen
-    let yearPool = MOCK_QUESTIONS.filter(matchesYear);
-    if (yearPool.length === 0) {
-      yearPool = [...MOCK_QUESTIONS];
+    // Determine target difficulty from laps
+    const currentLaps = this.player?.laps || 0;
+    let targetDiff: 1 | 2 | 3 = 1;
+    if (this.config.featureFlags?.feature_difficulty_curve !== false) {
+      const r = Math.random();
+      if (currentLaps <= 10) {
+        targetDiff = r < 0.8 ? 1 : 2;
+      } else if (currentLaps <= 25) {
+        targetDiff = r < 0.3 ? 1 : r < 0.8 ? 2 : 3;
+      } else if (currentLaps <= 45) {
+        targetDiff = r < 0.1 ? 1 : r < 0.5 ? 2 : 3;
+      } else {
+        targetDiff = r < 0.3 ? 2 : 3;
+      }
     }
 
-    let available = yearPool.filter((q) => !this.seenQuestionIds.has(q.id));
+    // Find available questions
+    let available = MOCK_QUESTIONS.filter((q) => !this.seenQuestionIds.has(q.id));
     if (available.length === 0) {
-      // Recycle unseen for this pool or full pool
       this.seenQuestionIds.clear();
-      available = [...yearPool];
+      available = [...MOCK_QUESTIONS];
     }
 
-    // Pick random question from available pool
     const randomIndex = Math.floor(Math.random() * available.length);
     const chosen = available[randomIndex];
     this.seenQuestionIds.add(chosen.id);
 
-    // Identify the correct answer text before shuffling
     const correctText = chosen.options[chosen.correctIndex];
 
     // Shuffle options using Fisher-Yates
@@ -226,10 +242,8 @@ export class MockApi implements GameApi {
       shuffledOptions[j] = temp;
     }
 
-    // Map where the correct option landed
     const newCorrectIndex = shuffledOptions.indexOf(correctText);
 
-    // Store in internal secret map (never exposed to client)
     this.pendingQuestionAnswers.set(chosen.id, newCorrectIndex);
     this.issuedAtMap.set(chosen.id, now);
 
@@ -237,14 +251,12 @@ export class MockApi implements GameApi {
       questionId: chosen.id,
       text: chosen.text,
       options: shuffledOptions,
+      difficulty: targetDiff,
     };
 
     return this.currentIssuedQuestion;
   }
 
-  /**
-   * Submit an answer. Evaluates against internal secret session map.
-   */
   public async submitAnswer(
     questionId: string,
     optionIndex: number,
@@ -252,7 +264,6 @@ export class MockApi implements GameApi {
   ): Promise<AnswerResult> {
     await this.delay();
 
-    // Idempotent return if already answered
     if (this.answeredMap.has(questionId)) {
       return this.answeredMap.get(questionId)!;
     }
@@ -267,7 +278,11 @@ export class MockApi implements GameApi {
     }
 
     const issuedAt = this.issuedAtMap.get(questionId) || submitTimeMs;
-    const isTimeout = submitTimeMs - issuedAt > this.config.questionTimeMs + 2000;
+    const isTimeout = submitTimeMs - issuedAt > this.config.questionTimeMs + 2000 || optionIndex < 0;
+
+    const revealEnabled = this.config.featureFlags?.feature_answer_reveal !== false;
+    const origQ = MOCK_QUESTIONS.find((q) => q.id === questionId) as (typeof MOCK_QUESTIONS[0] & { explanation?: string }) | undefined;
+    const explanation = origQ?.explanation || 'Tech pit explanation verified.';
 
     if (isTimeout) {
       this.pendingQuestionAnswers.delete(questionId);
@@ -279,12 +294,14 @@ export class MockApi implements GameApi {
         fuelGrantedMs: 0,
         laps: this.player?.laps ?? 0,
         correctTotal: this.player?.correct ?? 0,
+        correctIndex: revealEnabled ? expectedIndex : undefined,
+        explanation: revealEnabled ? explanation : undefined,
+        timedOut: true,
       };
       this.answeredMap.set(questionId, timeoutResult);
       return timeoutResult;
     }
 
-    // Remove from pending map
     this.pendingQuestionAnswers.delete(questionId);
     this.currentIssuedQuestion = null;
 
@@ -299,54 +316,73 @@ export class MockApi implements GameApi {
       this.lockedUntil = submitTimeMs + this.config.wrongLockoutMs;
     }
 
-    const fuelGranted = isCorrect ? this.config.fuelPerCorrectMs : 0;
     const result: AnswerResult = {
       correct: isCorrect,
-      fuelGrantedMs: fuelGranted,
+      fuelGrantedMs: isCorrect ? this.config.fuelPerCorrectMs : 0,
       laps: this.player?.laps ?? 0,
       correctTotal: this.player?.correct ?? 0,
+      correctIndex: !isCorrect && revealEnabled ? expectedIndex : undefined,
+      explanation: !isCorrect && revealEnabled ? explanation : undefined,
+      timedOut: false,
     };
 
     this.answeredMap.set(questionId, result);
     return result;
   }
 
-  public async submitLap(lapNumber: number, lapTimeMs: number): Promise<LapResult> {
+  public async submitLap(
+    lapNumber: number,
+    lapTimeMs: number,
+    now = Date.now()
+  ): Promise<LapResult> {
     await this.delay();
-    const now = Date.now();
+    const currentLaps = this.player?.laps ?? 0;
 
-    // (e) Race open check
     if (!this.config.isOpen) {
       return {
         accepted: false,
-        laps: this.player?.laps ?? 0,
-        reason: 'Race is closed or paused.',
+        laps: currentLaps,
+        reason: 'Race window is closed.',
       };
     }
 
-    // (a) Sequential lap check
-    const currentLaps = this.player?.laps ?? 0;
-    if (lapNumber !== currentLaps + 1) {
+    if (lapNumber <= currentLaps) {
       return {
         accepted: false,
         laps: currentLaps,
-        reason: 'Invalid lap sequence.',
+        reason: 'Duplicate or old lap.',
       };
     }
 
-    // (b) Min lap time check
-    if (lapTimeMs < this.config.minLapMs) {
+    if (lapNumber > currentLaps + 1) {
       return {
         accepted: false,
         laps: currentLaps,
-        reason: 'Lap time below minimum physical threshold.',
+        reason: 'Lap sequence skipped.',
       };
     }
 
-    // (c) Rapid lap submission check (0.9 * minLapMs)
+    // Dynamic min lap calculation based on speed ramp
+    const effectiveMin = minLapMs(
+      lapNumber,
+      this.config.lapMinFactor ?? 0.8,
+      this.config.speedStep ?? 0.04,
+      this.config.speedCap ?? 1.5,
+      undefined,
+      this.config.featureFlags?.feature_speed_ramp ?? true
+    );
+
+    if (lapTimeMs < effectiveMin) {
+      return {
+        accepted: false,
+        laps: currentLaps,
+        reason: `Lap time (${lapTimeMs}ms) faster than physical minimum (${effectiveMin}ms).`,
+      };
+    }
+
     const prevLapTime = this.lastLapAt ?? this.joinedAt;
     const elapsedSinceLastLap = now - prevLapTime;
-    if (elapsedSinceLastLap < this.config.minLapMs * 0.9) {
+    if (elapsedSinceLastLap < effectiveMin * 0.9) {
       return {
         accepted: false,
         laps: currentLaps,
@@ -354,8 +390,7 @@ export class MockApi implements GameApi {
       };
     }
 
-    // (d) Laps cannot exceed earned driving time
-    if ((currentLaps + 1) * this.config.minLapMs > this.fuelGrantedMsTotal * 1.05) {
+    if ((this.minDriveMsTotal + effectiveMin) > this.fuelGrantedMsTotal * 1.05) {
       return {
         accepted: false,
         laps: currentLaps,
@@ -366,6 +401,7 @@ export class MockApi implements GameApi {
     if (this.player) {
       this.player.laps = lapNumber;
     }
+    this.minDriveMsTotal += effectiveMin;
     this.lastLapAt = now;
 
     return {
@@ -374,27 +410,27 @@ export class MockApi implements GameApi {
     };
   }
 
-  public async getLeaderboard(): Promise<LeaderboardSnapshot> {
+  public async getLeaderboard(scope: Scope = 'ALL'): Promise<LeaderboardSnapshot> {
     await this.delay();
 
-    // Gradually advance bots to simulate live flashmob competition
+    // Advance bots
     const now = Date.now();
-    if (now >= this.config.startAt && now <= this.config.endAt) {
-      for (const bot of this.bots) {
-        if (Math.random() < 0.22) {
-          bot.laps += 1;
-          bot.lastLapTime = now;
-          if (Math.random() < 0.65) {
-            bot.correct += 1;
-          }
+    for (const bot of this.bots) {
+      if (Math.random() < 0.22) {
+        bot.laps += 1;
+        bot.lastLapTime = now;
+        if (Math.random() < 0.65) {
+          bot.correct += 1;
         }
       }
     }
 
-    const allRows: Array<{ id: string; name: string; laps: number; correct: number; lastLapTime: number; isMe: boolean }> = [
+    let allRows: Array<{ id: string; name: string; branch: Branch; year: Year; laps: number; correct: number; lastLapTime: number; isMe: boolean }> = [
       ...this.bots.map((b) => ({
         id: b.id,
         name: b.name,
+        branch: b.branch,
+        year: b.year,
         laps: b.laps,
         correct: b.correct,
         lastLapTime: b.lastLapTime,
@@ -406,6 +442,8 @@ export class MockApi implements GameApi {
       allRows.push({
         id: this.player.playerId,
         name: this.player.name,
+        branch: this.player.branch || 'COMPS',
+        year: this.player.year || 1,
         laps: this.player.laps,
         correct: this.player.correct,
         lastLapTime: now,
@@ -413,7 +451,13 @@ export class MockApi implements GameApi {
       });
     }
 
-    // Sort: laps desc, then correct desc, then lastLapTime asc
+    // Filter by scope
+    if (scope === 'BRANCH' && this.player?.branch) {
+      allRows = allRows.filter((r) => r.branch === this.player!.branch);
+    } else if (scope === 'YEAR' && this.player?.year) {
+      allRows = allRows.filter((r) => r.year === this.player!.year);
+    }
+
     allRows.sort((a, b) => {
       if (b.laps !== a.laps) return b.laps - a.laps;
       if (b.correct !== a.correct) return b.correct - a.correct;
@@ -423,24 +467,23 @@ export class MockApi implements GameApi {
     const ranked: LeaderboardRow[] = allRows.map((item, idx) => ({
       rank: idx + 1,
       name: item.name,
+      branch: item.branch,
+      year: item.year,
       laps: item.laps,
       correct: item.correct,
       isMe: item.isMe,
     }));
 
-    const myRow = ranked.find((r) => r.isMe) || null;
-    const topRows = ranked.slice(0, 10);
+    const me = ranked.find((r) => r.isMe) || null;
+    const top = ranked.slice(0, 10);
 
     return {
-      top: topRows,
-      me: myRow,
+      top,
+      me,
       totalPlayers: ranked.length,
+      scope,
     };
-  }
-
-  public getInternalPlayer(): PlayerState | null {
-    return this.player ? { ...this.player } : null;
   }
 }
 
-export const mockApi = new MockApi();
+export const mockApi = new MockApi(true);

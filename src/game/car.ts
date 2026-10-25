@@ -67,8 +67,15 @@ export class Car {
    * @param steerInput -1 (left), 0 (none), +1 (right)
    * @param hasFuel boolean indicating if fuel > 0
    * @param track Reference to racetrack for road query
+   * @param speedMultiplier Dynamic speed ramp multiplier (e.g. 1.0 to 1.5)
    */
-  public update(dt: number, steerInput: number, hasFuel: boolean, track: Track): void {
+  public update(
+    dt: number,
+    steerInput: number,
+    hasFuel: boolean,
+    track: Track,
+    speedMultiplier = 1.0
+  ): void {
     // 1. Check road surface & progress using fast local search
     const nearest = track.findNearestPoint(this.x, this.y, this.nearestTrackIndex);
     this.nearestTrackIndex = nearest.point.index;
@@ -77,9 +84,12 @@ export class Car {
 
     // 2. Acceleration / Deceleration along forward vector
     if (hasFuel) {
-      const targetSpeed = this.onRoad ? Car.MAX_SPEED : Car.OFFROAD_MAX_SPEED;
+      const baseMax = this.onRoad ? Car.MAX_SPEED : Car.OFFROAD_MAX_SPEED;
+      const targetSpeed = baseMax * speedMultiplier;
+      const accel = Car.ACCELERATION * speedMultiplier;
+
       if (this.forwardSpeed < targetSpeed) {
-        this.forwardSpeed = Math.min(targetSpeed, this.forwardSpeed + Car.ACCELERATION * dt);
+        this.forwardSpeed = Math.min(targetSpeed, this.forwardSpeed + accel * dt);
       } else {
         // Scrub speed down to offroad limit or overspeed limit with drag
         const scrubRate = this.onRoad ? 60 : Car.OFFROAD_DECEL;
@@ -91,10 +101,10 @@ export class Car {
       this.forwardSpeed = Math.max(0, this.forwardSpeed - decel * dt);
     }
 
-    // 3. Steering rate scales with speed
-    // Low speed gives lower turn rate so car doesn't spin in place; crisp turning at speed
+    // 3. Steering rate scales with speed and relaxes slightly at high speed multiplier (preventing twitchiness)
     const speedFactor = Math.min(1.0, Math.max(0.1, this.forwardSpeed / 70));
-    const turnRate = steerInput * Car.MAX_TURN_RATE * speedFactor;
+    const relaxedTurnFactor = speedMultiplier > 1 ? 1 / Math.sqrt(speedMultiplier) : 1.0;
+    const turnRate = steerInput * (Car.MAX_TURN_RATE * relaxedTurnFactor) * speedFactor;
     this.heading += turnRate * dt;
 
     // 4. Direction vectors

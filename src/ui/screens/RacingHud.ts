@@ -1,9 +1,11 @@
-import type { GameApi, GameConfig } from '../../api/types';
+import type { GameApi, GameConfig, Scope } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { sounds } from '../../audio/soundManager';
 import { DEBUG_CONFIG } from '../../config/constants';
 import type { RaceScene } from '../../game/scenes/RaceScene';
 import { Car } from '../../game/car';
+import { Storage } from '../../util/storage';
+import { speedMult } from '../../shared/difficulty';
 
 interface RacingHudProps {
   api: GameApi;
@@ -21,11 +23,18 @@ export function renderRacingHud(
   let isLeaderboardOpen = false;
   let leaderboardPollTimer: number | null = null;
   let backgroundPollTimer: number | null = null;
+  let currentScope: Scope = 'ALL';
+  let prevLap = 0;
 
   // Track calibration metrics
   const trackLength = raceScene?.track.totalLength || 11200;
   const theoreticalBestLapMs = Math.round((trackLength / Car.MAX_SPEED) * 1000);
   const recommendedMinLapMs = Math.round(theoreticalBestLapMs * 0.8);
+
+  const savedPlayer = Storage.getPlayer();
+  const driverTag = savedPlayer
+    ? `${savedPlayer.name} · ${savedPlayer.branch || 'COMPS'} · ${savedPlayer.year || 1} yr`
+    : 'DRIVER';
 
   container.innerHTML = `
     <div class="screen-layer transparent-bg" style="pointer-events:none;">
@@ -33,17 +42,17 @@ export function renderRacingHud(
 
       <!-- Retro Top Arcade HUD -->
       <div class="hud-topbar">
-        <div class="hud-group" style="min-width: 44px;">
+        <div class="hud-group" style="min-width: 40px;">
           <span class="hud-label">LAPS</span>
           <span id="hud-laps" class="hud-value">0</span>
         </div>
 
-        <div class="hud-group" style="min-width: 44px;">
+        <div class="hud-group" style="min-width: 40px;">
           <span class="hud-label">CORRECT</span>
           <span id="hud-correct" class="hud-value green-text">0</span>
         </div>
 
-        <div class="hud-group fuel-container" style="flex: 1; max-width: 105px;">
+        <div class="hud-group fuel-container" style="flex: 1; max-width: 95px;">
           <div style="display:flex; justify-content:space-between; font-size:7px;">
             <span class="hud-label">FUEL</span>
             <span id="hud-fuel-sec" class="hud-value" style="font-size:7px;">30s</span>
@@ -53,13 +62,19 @@ export function renderRacingHud(
           </div>
         </div>
 
-        <!-- Tappable Rank Chip -->
-        <button id="hud-rank-btn" class="sound-toggle-btn" style="min-width: 46px; padding:3px 5px; border-color:var(--cyan); cursor:pointer;">
+        <!-- Dynamic Speed Multiplier Chip -->
+        <div class="hud-group" style="min-width: 42px;">
+          <span class="hud-label">SPEED</span>
+          <span id="hud-speed-mult" class="hud-value yellow-text" style="font-size:9px;">1.00x</span>
+        </div>
+
+        <!-- Tappable Rank Chip (Always reflects global ALL rank) -->
+        <button id="hud-rank-btn" class="sound-toggle-btn" style="min-width: 44px; padding:3px 4px; border-color:var(--cyan); cursor:pointer;">
           <span class="hud-label" style="display:block; font-size:6px;">RANK</span>
           <span id="hud-rank" class="hud-value cyan-text" style="font-size:10px;">#--</span>
         </button>
 
-        <div class="hud-group" style="min-width: 46px;">
+        <div class="hud-group" style="min-width: 42px;">
           <span class="hud-label">TIME</span>
           <span id="hud-race-time" class="hud-value">--:--</span>
         </div>
@@ -68,6 +83,14 @@ export function renderRacingHud(
           ${sounds.isMuted() ? '🔇' : '🔊'}
         </button>
       </div>
+
+      <!-- Driver Tag Bar -->
+      <div style="position: absolute; top: 38px; left: 10px; font-family: var(--font-retro); font-size: 7px; color: var(--cyan); text-shadow: 1px 1px 0 #000; pointer-events: none; z-index: 25; background: rgba(0,0,0,0.6); padding: 2px 5px; border-left: 2px solid var(--cyan);">
+        ${driverTag}
+      </div>
+
+      <!-- HUD Toast Notification Container -->
+      <div id="hud-toast-container" style="pointer-events:none;"></div>
 
       <!-- Minimap Frame (Top Right) -->
       <div class="minimap-frame" id="minimap-container">
@@ -117,6 +140,13 @@ export function renderRacingHud(
             </button>
           </div>
 
+          <!-- Scope Selection Tabs -->
+          <div class="lb-tabs-container">
+            <button id="tab-scope-all" class="lb-tab-btn active" data-scope="ALL">ALL</button>
+            <button id="tab-scope-branch" class="lb-tab-btn" data-scope="BRANCH">MY BRANCH</button>
+            <button id="tab-scope-year" class="lb-tab-btn" data-scope="YEAR">MY YEAR</button>
+          </div>
+
           <div id="live-board-content" style="overflow-y: auto; max-height: 280px;">
             <p class="retro-text" style="font-size:8px; opacity:0.7; padding:10px 0; text-align:center;">
               FETCHING LIVE TELEMETRY...
@@ -145,11 +175,23 @@ export function renderRacingHud(
   const steerLeftBtn = container.querySelector('#steer-left-btn') as HTMLElement | null;
   const steerRightBtn = container.querySelector('#steer-right-btn') as HTMLElement | null;
   const debugLastLapEl = container.querySelector('#debug-last-lap') as HTMLDivElement | null;
+  const speedMultEl = container.querySelector('#hud-speed-mult') as HTMLSpanElement | null;
 
   const lbModalEl = container.querySelector('#leaderboard-modal') as HTMLDivElement | null;
   const closeLbBtn = container.querySelector('#close-leaderboard-btn') as HTMLButtonElement | null;
   const liveBoardContent = container.querySelector('#live-board-content') as HTMLDivElement | null;
   const lbStatusTag = container.querySelector('#leaderboard-status-tag') as HTMLElement | null;
+  const toastContainer = container.querySelector('#hud-toast-container') as HTMLDivElement | null;
+
+  // Toast Banner Display Helper
+  const showHudToast = (msg: string) => {
+    if (!toastContainer) return;
+    toastContainer.innerHTML = `<div class="hud-toast-banner">${msg}</div>`;
+    window.setTimeout(() => {
+      if (toastContainer) toastContainer.innerHTML = '';
+    }, 2400);
+  };
+  (window as any).__showHudToast = showHudToast;
 
   // Setup Minimap Base Canvas
   const miniCanvas = container.querySelector('#minimap-canvas') as HTMLCanvasElement | null;
@@ -206,15 +248,20 @@ export function renderRacingHud(
   // Leaderboard Modal Open/Close Handlers
   rankBtn?.addEventListener('click', () => {
     sounds.unlock();
+    sounds.playClick();
     openLeaderboard();
   });
 
   closeLbBtn?.addEventListener('click', () => {
+    sounds.unlock();
+    sounds.playClick();
     closeLeaderboard();
   });
 
   const changeDriverBtn = container.querySelector('#hud-change-driver-btn') as HTMLButtonElement | null;
   changeDriverBtn?.addEventListener('click', () => {
+    sounds.unlock();
+    sounds.playClick();
     closeLeaderboard();
     stateMachine.transition('JOIN', {});
   });
@@ -223,6 +270,19 @@ export function renderRacingHud(
     if (e.target === lbModalEl) {
       closeLeaderboard();
     }
+  });
+
+  // Wire Scope Tabs
+  const scopeTabs = container.querySelectorAll('.lb-tab-btn');
+  scopeTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      sounds.unlock();
+      sounds.playClick();
+      const scope = (tab.getAttribute('data-scope') || 'ALL') as Scope;
+      currentScope = scope;
+      scopeTabs.forEach((t) => t.classList.toggle('active', t === tab));
+      fetchLeaderboardData();
+    });
   });
 
   const openLeaderboard = () => {
@@ -255,12 +315,12 @@ export function renderRacingHud(
     }, 4000 + jitter);
   };
 
-  // Background polling every 8s to keep HUD rank chip updated
+  // Background polling every 8s to keep HUD rank chip updated with global ALL scope
   const startBackgroundPolling = () => {
     backgroundPollTimer = window.setInterval(async () => {
       if (!isLeaderboardOpen) {
         try {
-          const snap = await api.getLeaderboard();
+          const snap = await api.getLeaderboard('ALL');
           if (snap.me && rankEl) {
             rankEl.textContent = `#${snap.me.rank}${snap.isStale ? '*' : ''}`;
           }
@@ -274,10 +334,13 @@ export function renderRacingHud(
 
   const fetchLeaderboardData = async () => {
     try {
-      const snap = await api.getLeaderboard();
+      const snap = await api.getLeaderboard(currentScope);
 
       if (snap.me) {
-        if (rankEl) rankEl.textContent = `#${snap.me.rank}${snap.isStale ? '*' : ''}`;
+        // Only update HUD rank chip if viewing ALL scope
+        if (currentScope === 'ALL' && rankEl) {
+          rankEl.textContent = `#${snap.me.rank}${snap.isStale ? '*' : ''}`;
+        }
         if (correctEl) correctEl.textContent = snap.me.correct.toString();
       }
 
@@ -286,7 +349,8 @@ export function renderRacingHud(
           lbStatusTag.textContent = '⚠️ [STALE DATA — OFFLINE / RECONNECTING]';
           lbStatusTag.className = 'retro-text yellow-text';
         } else {
-          lbStatusTag.textContent = '● LIVE FLASHMOB RANKINGS';
+          const scopeLabel = currentScope === 'BRANCH' ? `● ${savedPlayer?.branch || 'BRANCH'} RANKINGS` : currentScope === 'YEAR' ? `● YEAR ${savedPlayer?.year || 1} RANKINGS` : '● ALL-STAR RANKINGS';
+          lbStatusTag.textContent = scopeLabel;
           lbStatusTag.className = 'retro-text cyan-text';
         }
       }
@@ -298,8 +362,8 @@ export function renderRacingHud(
           <table class="leaderboard-table" style="font-size:8px;">
             <thead>
               <tr>
-                <th style="width:18%;">RNK</th>
-                <th style="width:46%;">NAME</th>
+                <th style="width:16%;">RNK</th>
+                <th style="width:48%;">NAME</th>
                 <th style="width:18%; text-align:right;">LAPS</th>
                 <th style="width:18%; text-align:right;">COR</th>
               </tr>
@@ -310,8 +374,8 @@ export function renderRacingHud(
                   (row) => `
                 <tr class="${row.isMe ? 'my-row' : ''}">
                   <td>#${row.rank}</td>
-                  <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px;">
-                    ${row.name}
+                  <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:115px;">
+                    ${row.name} <span style="font-size:6px; color:var(--cyan); opacity:0.85;">${row.branch || ''} Y${row.year || ''}</span>
                   </td>
                   <td style="text-align:right;">${row.laps}</td>
                   <td style="text-align:right;">${row.correct}</td>
@@ -330,8 +394,8 @@ export function renderRacingHud(
                 </tr>
                 <tr class="my-row">
                   <td>#${snap.me.rank}</td>
-                  <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px;">
-                    ${snap.me.name}
+                  <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:115px;">
+                    ${snap.me.name} <span style="font-size:6px; color:var(--cyan); opacity:0.85;">${snap.me.branch || ''} Y${snap.me.year || ''}</span>
                   </td>
                   <td style="text-align:right;">${snap.me.laps}</td>
                   <td style="text-align:right;">${snap.me.correct}</td>
@@ -343,7 +407,7 @@ export function renderRacingHud(
           </table>
         `;
       } else if (liveBoardContent && snap.top.length === 0) {
-        liveBoardContent.innerHTML = `<p class="retro-text yellow-text" style="font-size:8px; text-align:center; padding: 12px 0;">NO RACERS RECORDED YET</p>`;
+        liveBoardContent.innerHTML = `<p class="retro-text yellow-text" style="font-size:8px; text-align:center; padding: 12px 0;">NO RACERS IN THIS CATEGORY YET</p>`;
       }
     } catch {
       if (lbStatusTag) {
@@ -369,9 +433,33 @@ export function renderRacingHud(
     }
 
     if (raceScene) {
-      // 1. Update Laps
+      // 1. Update Laps and Speed Multiplier
+      const currentLap = raceScene.lapManager.getLapCount();
       if (lapsEl) {
-        lapsEl.textContent = raceScene.lapManager.getLapCount().toString();
+        lapsEl.textContent = currentLap.toString();
+      }
+
+      const spd = speedMult(
+        currentLap + 1,
+        config.speedStep ?? 0.04,
+        config.speedCap ?? 1.5,
+        config.featureFlags?.feature_speed_ramp ?? true
+      );
+
+      if (speedMultEl) {
+        speedMultEl.textContent = `${spd.toFixed(2)}x`;
+      }
+
+      // Check lap transition for Speed toast
+      if (currentLap !== prevLap) {
+        if (currentLap > prevLap && prevLap > 0) {
+          if (spd >= (config.speedCap || 1.5)) {
+            showHudToast(`⚡ MAX SPEED! ${spd.toFixed(2)}x`);
+          } else {
+            showHudToast(`⚡ SPEED UP! ${spd.toFixed(2)}x`);
+          }
+        }
+        prevLap = currentLap;
       }
 
       // 2. Update Fuel Gauge
@@ -442,5 +530,6 @@ export function renderRacingHud(
     if (backgroundPollTimer !== null) {
       window.clearInterval(backgroundPollTimer);
     }
+    delete (window as any).__showHudToast;
   };
 }

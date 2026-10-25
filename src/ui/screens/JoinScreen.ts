@@ -1,10 +1,10 @@
-import type { GameApi } from '../../api/types';
+import type { GameApi, Branch, Year } from '../../api/types';
 import { stateMachine } from '../../game/stateMachine';
 import { Storage } from '../../util/storage';
 import { sounds } from '../../audio/soundManager';
 
-const YEARS = ['FE', 'SE', 'TE', 'BE'] as const;
-const BRANCHES = ['COMPS', 'CSE', 'ECS', 'MECH'] as const;
+const BRANCHES: Branch[] = ['COMPS', 'CSE', 'ECS', 'MECH', 'AIDS'];
+const YEARS: Year[] = [1, 2, 3, 4];
 
 export function renderJoinScreen(
   container: HTMLElement,
@@ -12,8 +12,12 @@ export function renderJoinScreen(
   defaultName = ''
 ): () => void {
   const storedPlayer = Storage.getPlayer();
-  const initialYear = storedPlayer?.year || 'FE';
-  const initialBranch = storedPlayer?.branch || 'COMPS';
+  let selectedBranch: Branch | null = (storedPlayer?.branch as Branch) || null;
+  let selectedYear: Year | null = storedPlayer?.year ? (Number(storedPlayer.year) as Year) : null;
+
+  if (selectedBranch === 'AIDS') {
+    selectedYear = 4;
+  }
 
   container.innerHTML = `
     <div class="screen-layer">
@@ -40,34 +44,47 @@ export function renderJoinScreen(
             value="${defaultName || storedPlayer?.name || ''}"
           />
 
-          <div style="display:flex; gap:8px; margin-top: 10px;">
-            <div style="flex:1;">
-              <label for="player-year-select" class="retro-text highlight" style="display:block; margin-bottom: 4px; font-size: 8px;">
-                YEAR
-              </label>
-              <select id="player-year-select" class="retro-select">
-                ${YEARS.map(
-                  (y) => `<option value="${y}" ${y === initialYear ? 'selected' : ''}>${y}</option>`
-                ).join('')}
-              </select>
+          <!-- Branch Selection Group -->
+          <div style="margin-top: 10px;">
+            <label class="retro-text highlight" style="display:block; margin-bottom: 5px; font-size: 8px;">
+              SELECT BRANCH
+            </label>
+            <div id="branch-group" style="display:flex; flex-wrap:wrap; gap:4px;">
+              ${BRANCHES.map(
+                (b) => `
+                <button type="button" class="retro-choice-btn branch-btn ${b === selectedBranch ? 'active' : ''}" data-branch="${b}">
+                  ${b}
+                </button>
+              `
+              ).join('')}
             </div>
+          </div>
 
-            <div style="flex:1.2;">
-              <label for="player-branch-select" class="retro-text highlight" style="display:block; margin-bottom: 4px; font-size: 8px;">
-                BRANCH
+          <!-- Year Selection Group -->
+          <div style="margin-top: 10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+              <label class="retro-text highlight" style="font-size: 8px;">
+                SELECT YEAR
               </label>
-              <select id="player-branch-select" class="retro-select">
-                ${BRANCHES.map(
-                  (b) => `<option value="${b}" ${b === initialBranch ? 'selected' : ''}>${b}</option>`
-                ).join('')}
-              </select>
+              <span id="aids-note" style="font-size:7px; color:var(--accent-yellow); display:${selectedBranch === 'AIDS' ? 'inline' : 'none'};">
+                AIDS: 4th year only
+              </span>
+            </div>
+            <div id="year-group" style="display:flex; gap:4px;">
+              ${YEARS.map(
+                (y) => `
+                <button type="button" class="retro-choice-btn year-btn ${y === selectedYear ? 'active' : ''}" data-year="${y}">
+                  ${y === 1 ? '1st' : y === 2 ? '2nd' : y === 3 ? '3rd' : '4th'}
+                </button>
+              `
+              ).join('')}
             </div>
           </div>
 
           <div id="join-error" class="error-banner" style="margin-top: 8px;"></div>
         </div>
 
-        <button id="start-engine-btn" class="retro-btn btn-green">
+        <button id="start-engine-btn" class="retro-btn btn-green" disabled>
           START ENGINE
         </button>
 
@@ -79,10 +96,73 @@ export function renderJoinScreen(
   `;
 
   const input = container.querySelector('#player-name-input') as HTMLInputElement | null;
-  const yearSelect = container.querySelector('#player-year-select') as HTMLSelectElement | null;
-  const branchSelect = container.querySelector('#player-branch-select') as HTMLSelectElement | null;
   const button = container.querySelector('#start-engine-btn') as HTMLButtonElement | null;
   const errorBox = container.querySelector('#join-error') as HTMLDivElement | null;
+  const branchBtns = container.querySelectorAll('.branch-btn');
+  const yearBtns = container.querySelectorAll('.year-btn');
+  const aidsNote = container.querySelector('#aids-note') as HTMLElement | null;
+
+  const updateYearButtonsState = () => {
+    yearBtns.forEach((btn) => {
+      const y = Number((btn as HTMLElement).dataset.year) as Year;
+      const bEl = btn as HTMLButtonElement;
+      if (selectedBranch === 'AIDS' && y !== 4) {
+        bEl.disabled = true;
+        bEl.classList.remove('active');
+      } else {
+        bEl.disabled = false;
+        if (y === selectedYear) {
+          bEl.classList.add('active');
+        } else {
+          bEl.classList.remove('active');
+        }
+      }
+    });
+
+    if (aidsNote) {
+      aidsNote.style.display = selectedBranch === 'AIDS' ? 'inline' : 'none';
+    }
+  };
+
+  const updateButtonState = () => {
+    if (!button || !input) return;
+    const nameValid = input.value.trim().length >= 2;
+    button.disabled = !(nameValid && selectedBranch && selectedYear);
+  };
+
+  branchBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      sounds.playClick();
+      branchBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedBranch = (btn as HTMLElement).dataset.branch as Branch;
+
+      if (selectedBranch === 'AIDS') {
+        selectedYear = 4;
+      }
+      updateYearButtonsState();
+      updateButtonState();
+    });
+  });
+
+  yearBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const y = Number((btn as HTMLElement).dataset.year) as Year;
+      if (selectedBranch === 'AIDS' && y !== 4) return;
+      sounds.playClick();
+      selectedYear = y;
+      yearBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateButtonState();
+    });
+  });
+
+  input?.addEventListener('input', () => {
+    updateButtonState();
+  });
+
+  updateYearButtonsState();
+  updateButtonState();
 
   const validate = (val: string): string | null => {
     const trimmed = val.trim();
@@ -98,16 +178,17 @@ export function renderJoinScreen(
     if (!/^[a-zA-Z0-9 ]+$/.test(trimmed)) {
       return 'LETTERS, NUMBERS & SPACES ONLY';
     }
+    if (!selectedBranch || !selectedYear) {
+      return 'SELECT YOUR BRANCH & YEAR!';
+    }
     return null;
   };
 
   const handleSubmit = async () => {
     sounds.unlock();
 
-    if (!input || !button || !errorBox || !yearSelect || !branchSelect) return;
+    if (!input || !button || !errorBox || !selectedBranch || !selectedYear) return;
     const name = input.value.trim();
-    const year = yearSelect.value;
-    const branch = branchSelect.value;
     const error = validate(name);
 
     if (error) {
@@ -123,7 +204,7 @@ export function renderJoinScreen(
     button.textContent = 'CONNECTING...';
 
     try {
-      const player = await api.joinRace(name, year, branch);
+      const player = await api.joinRace(name, selectedBranch, selectedYear);
       sounds.playCorrect();
       const config = await api.getConfig();
 
@@ -136,12 +217,11 @@ export function renderJoinScreen(
         stateMachine.transition('COUNTDOWN', { player, config });
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'FAILED TO JOIN RACE';
-      errorBox.textContent = msg.toUpperCase();
-      input.classList.add('input-error');
       button.disabled = false;
       button.textContent = 'START ENGINE';
       sounds.playWrong();
+      const message = err instanceof Error ? err.message : 'FAILED TO JOIN RACE';
+      errorBox.textContent = message.toUpperCase();
     }
   };
 
@@ -151,6 +231,8 @@ export function renderJoinScreen(
       handleSubmit();
     }
   });
+
+  input?.focus();
 
   return () => {
     button?.removeEventListener('click', handleSubmit);

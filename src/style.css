@@ -544,6 +544,31 @@ p.retro-text {
   border-color: #ffffff;
 }
 
+.option-btn.reveal-correct {
+  background-color: var(--correct-green) !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+  font-weight: bold;
+  animation: revealBlink 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes revealBlink {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.answer-icon {
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: bold;
+}
+.answer-icon.wrong {
+  color: #ffffff;
+}
+.answer-icon.correct {
+  color: #000000;
+}
+
 .lockout-notice {
   background-color: var(--wrong-red);
   color: #ffffff;
@@ -552,6 +577,132 @@ p.retro-text {
   border: 2px solid #000;
   text-align: center;
   box-shadow: 2px 2px 0px #000;
+}
+
+/* Retro Choice Buttons (Branch & Year Groups) */
+.retro-choice-btn {
+  font-family: var(--font-retro);
+  font-size: 8px;
+  padding: 8px 6px;
+  background-color: #1e1e34;
+  color: #ffffff;
+  border: 2px solid var(--cyan);
+  box-shadow: 2px 2px 0px var(--border-dark);
+  cursor: pointer;
+  flex: 1;
+  min-width: 44px;
+  text-align: center;
+  touch-action: manipulation;
+  transition: all 0.1s ease;
+}
+
+.retro-choice-btn:active,
+.retro-choice-btn.active {
+  background-color: var(--cyan);
+  color: #000000;
+  border-color: #ffffff;
+  font-weight: bold;
+}
+
+.retro-choice-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  border-color: #555555;
+  background-color: #111122;
+  color: #777777;
+}
+
+
+/* Leaderboard Tabs */
+.lb-tabs-container {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0 8px 0;
+  width: 100%;
+}
+
+.lb-tab-btn {
+  font-family: var(--font-retro);
+  font-size: 7px;
+  padding: 4px 6px;
+  background-color: #1e1e34;
+  color: #ffffff;
+  border: 1px solid var(--cyan);
+  box-shadow: 1px 1px 0px var(--border-dark);
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+  touch-action: manipulation;
+}
+
+.lb-tab-btn.active {
+  background-color: var(--cyan);
+  color: #000000;
+  border-color: #ffffff;
+  font-weight: bold;
+}
+
+/* Difficulty Badges */
+.diff-badge {
+  display: inline-block;
+  font-family: var(--font-retro);
+  font-size: 7px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid;
+  letter-spacing: 0.5px;
+}
+.diff-easy {
+  background-color: #043615;
+  color: #00ff66;
+  border-color: #00ff66;
+}
+.diff-medium {
+  background-color: #423002;
+  color: #ffd700;
+  border-color: #ffd700;
+}
+.diff-hard {
+  background-color: #470d17;
+  color: #ff2e4d;
+  border-color: #ff2e4d;
+}
+
+/* Speed Chip and Toasts */
+.hud-speed-chip {
+  display: inline-block;
+  font-family: var(--font-retro);
+  font-size: 7px;
+  color: #ffd700;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid #ffd700;
+  padding: 2px 4px;
+}
+
+.hud-toast-banner {
+  position: absolute;
+  top: 75px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  border: 2px solid var(--accent-yellow);
+  padding: 6px 14px;
+  font-family: var(--font-retro);
+  font-size: 10px;
+  color: var(--accent-yellow);
+  text-align: center;
+  z-index: 30;
+  pointer-events: none;
+  animation: toastFade 2.2s forwards;
+  box-shadow: 0 0 10px rgba(255, 212, 0, 0.5);
+}
+
+@keyframes toastFade {
+  0% { opacity: 0; transform: translate(-50%, -10px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  75% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
 }
 
 /* Leaderboard List on Results Screen */

@@ -8,6 +8,9 @@ import type {
   LapResult,
   LeaderboardSnapshot,
   LeaderboardRow,
+  Branch,
+  Year,
+  Scope,
 } from './types';
 import { Storage } from '../util/storage';
 import { networkMonitor } from '../util/network';
@@ -157,6 +160,19 @@ export class SupabaseApi implements GameApi {
       questionTimeMs: Number(data.questionTimeMs),
       wrongLockoutMs: Number(data.wrongLockoutMs),
       minLapMs: Number(data.minLapMs),
+      speedStep: data.speedStep !== undefined ? Number(data.speedStep) : 0.04,
+      speedCap: data.speedCap !== undefined ? Number(data.speedCap) : 1.5,
+      lapMinFactor: data.lapMinFactor !== undefined ? Number(data.lapMinFactor) : 0.8,
+      trackStages: (data.trackStages as any) || undefined,
+      featureFlags: (data.featureFlags as Record<string, boolean>) || {
+        feature_branch_questions: true,
+        feature_difficulty_curve: true,
+        feature_speed_ramp: true,
+        feature_track_stages: true,
+        feature_answer_reveal: true,
+      },
+      branchSpecificRatio: data.branchSpecificRatio !== undefined ? Number(data.branchSpecificRatio) : 0.7,
+      difficultyCurve: (data.difficultyCurve as any) || undefined,
     };
   }
 
@@ -171,25 +187,31 @@ export class SupabaseApi implements GameApi {
   /**
    * Join or resume player in race
    */
-  public async joinRace(name: string, year?: string, branch?: string): Promise<PlayerState> {
+  public async joinRace(name: string, branch?: Branch, year?: Year): Promise<PlayerState> {
     const userId = await this.ensureAuth();
     const res = await this.rpcWithTimeout<{
       playerId: string;
       name: string;
       laps: number;
       correct: number;
-    }>('join_race', { p_name: name }, 5000);
+      branch?: Branch;
+      year?: Year;
+    }>('join_race', {
+      p_name: name,
+      p_branch: branch,
+      p_year: year,
+    }, 5000);
 
     const player: PlayerState = {
       playerId: res.playerId || userId,
       name: res.name,
-      year,
-      branch,
+      branch: res.branch || branch || 'COMPS',
+      year: res.year || year || 1,
       laps: Number(res.laps || 0),
       correct: Number(res.correct || 0),
     };
 
-    Storage.setPlayer(player.playerId, player.name, year, branch);
+    Storage.setPlayer(player.playerId, player.name, String(player.year), player.branch);
     return player;
   }
 
@@ -202,12 +224,14 @@ export class SupabaseApi implements GameApi {
       questionId: string;
       text: string;
       options: string[];
+      difficulty?: 1 | 2 | 3;
     }>('request_question', {}, 5000);
 
     return {
       questionId: data.questionId,
       text: data.text,
       options: data.options,
+      difficulty: data.difficulty,
     };
   }
 
@@ -222,6 +246,9 @@ export class SupabaseApi implements GameApi {
       fuelGrantedMs: number;
       laps: number;
       correctTotal: number;
+      correctIndex?: number;
+      explanation?: string;
+      timedOut?: boolean;
     }>('submit_answer', {
       p_question_id: questionId,
       p_option_index: optionIndex,
@@ -232,6 +259,9 @@ export class SupabaseApi implements GameApi {
       fuelGrantedMs: Number(data.fuelGrantedMs),
       laps: Number(data.laps),
       correctTotal: Number(data.correctTotal),
+      correctIndex: data.correctIndex !== undefined ? Number(data.correctIndex) : undefined,
+      explanation: data.explanation || undefined,
+      timedOut: Boolean(data.timedOut),
     };
   }
 
@@ -329,7 +359,7 @@ export class SupabaseApi implements GameApi {
   /**
    * Get leaderboard with limited retry and resilient fallback to cached/stale snapshot
    */
-  public async getLeaderboard(): Promise<LeaderboardSnapshot> {
+  public async getLeaderboard(scope: Scope = 'ALL'): Promise<LeaderboardSnapshot> {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         await this.ensureAuth();
@@ -337,12 +367,14 @@ export class SupabaseApi implements GameApi {
           top: LeaderboardRow[];
           me: LeaderboardRow | null;
           totalPlayers: number;
-        }>('get_leaderboard', { p_limit: 10 }, 8000);
+        }>('get_leaderboard', { p_limit: 10, p_scope: scope }, 8000);
 
         const snapshot: LeaderboardSnapshot = {
           top: (data.top || []).map((r) => ({
             rank: Number(r.rank),
             name: String(r.name),
+            branch: r.branch as Branch,
+            year: r.year ? (Number(r.year) as Year) : undefined,
             laps: Number(r.laps),
             correct: Number(r.correct),
             isMe: Boolean(r.isMe),
@@ -351,6 +383,8 @@ export class SupabaseApi implements GameApi {
             ? {
                 rank: Number(data.me.rank),
                 name: String(data.me.name),
+                branch: data.me.branch as Branch,
+                year: data.me.year ? (Number(data.me.year) as Year) : undefined,
                 laps: Number(data.me.laps),
                 correct: Number(data.me.correct),
                 isMe: true,
@@ -358,6 +392,7 @@ export class SupabaseApi implements GameApi {
             : null,
           totalPlayers: Number(data.totalPlayers || 0),
           isStale: false,
+          scope,
         };
 
         this.cachedLeaderboard = snapshot;
@@ -375,6 +410,7 @@ export class SupabaseApi implements GameApi {
       return {
         ...this.cachedLeaderboard,
         isStale: true,
+        scope,
       };
     }
 
@@ -384,6 +420,7 @@ export class SupabaseApi implements GameApi {
       me: null,
       totalPlayers: 0,
       isStale: true,
+      scope,
     };
   }
 }

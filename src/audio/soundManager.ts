@@ -84,6 +84,11 @@ class SoundManager {
     this.playTone(880, 'square', 0.35, 0.25);
   }
 
+  public playClick(): void {
+    // Short retro UI click
+    this.playTone(600, 'triangle', 0.04, 0.1);
+  }
+
   public playCorrect(): void {
     if (this.muted || !this.ctx) return;
     this.unlock();

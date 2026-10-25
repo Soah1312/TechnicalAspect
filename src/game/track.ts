@@ -29,45 +29,7 @@ export const WORLD_WIDTH = 3200;
 export const WORLD_HEIGHT = 2900;
 export const NUM_GATES = 6;
 
-// 24 control points scaled for a ~11,200 px circuit (~50-52s lap at 220 px/s)
-const CONTROL_POINTS_BASE: [number, number][] = [
-  // 0-2: Main Straight (Home straight, heading East)
-  [600, 2500],
-  [1200, 2500],
-  [1800, 2500],
-  // 3-5: Turn 1 & 2 Sweeper (Wide sweeping curve heading North-East)
-  [2300, 2450],
-  [2650, 2200],
-  [2750, 1750],
-  // 6-8: Back Straight into Chicane
-  [2750, 1250],
-  [2600, 850],
-  [2350, 650],
-  // 9-11: North Straight heading West
-  [2100, 400],
-  [1500, 300],
-  [1000, 300],
-  // 12-13: Tight Hairpin (180 degree turn)
-  [600, 450],
-  [800, 800],
-  // 14-16: S-Bend & Mid-field Infield Flow
-  [1250, 950],
-  [1450, 1300],
-  [1300, 1650],
-  // 17-18: Technical Carousel
-  [950, 1800],
-  [600, 1700],
-  // 19-21: West Sweeping Straight heading South
-  [350, 1400],
-  [250, 1750],
-  [250, 2150],
-  // 22-23: Final Turn curving back to Main Straight
-  [350, 2400],
-  [450, 2500],
-];
-
-// Scale factor applied to base control points
-const TRACK_SCALE = 1.12;
+import { getControlPointsForStage, TRACK_SCALE } from './tracks/trackStages';
 
 export class Track {
   public readonly points: TrackPoint[] = [];
@@ -75,9 +37,11 @@ export class Track {
   public readonly gates: CheckpointGate[] = [];
   public readonly startPosition: Point2D;
   public readonly startAngle: number; // In radians
+  public readonly stage: number;
 
-  constructor() {
-    const rawPoints = this.generateCenterline();
+  constructor(stage = 1) {
+    this.stage = stage;
+    const rawPoints = this.generateCenterline(stage);
     this.points = rawPoints;
 
     this.totalLength = this.points[this.points.length - 1].distance;
@@ -91,13 +55,14 @@ export class Track {
     this.startAngle = Math.atan2(startPt.tangent.y, startPt.tangent.x);
   }
 
-  private generateCenterline(): TrackPoint[] {
-    const controlPoints = CONTROL_POINTS_BASE.map(([x, y]) => ({
+  private generateCenterline(stage = 1): TrackPoint[] {
+    const rawControl = getControlPointsForStage(stage);
+    const controlPoints = rawControl.map(([x, y]) => ({
       x: x * TRACK_SCALE,
       y: y * TRACK_SCALE,
     }));
     const M = controlPoints.length;
-    const samplesPerSegment = 25; // 24 * 25 = 600 points
+    const samplesPerSegment = 25;
     const sampledPositions: Point2D[] = [];
 
     for (let i = 0; i < M; i++) {

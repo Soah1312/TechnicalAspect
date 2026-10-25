@@ -1,0 +1,4 @@
+text,option_a,option_b,option_c,option_d,correct,branches,year_min,year_max,difficulty,explanation
+"What does CPU stand for?","Central Processing Unit","Central Program Utility","Computer Personal Unit","Control Processing Unit",A,ALL,1,4,1,"The CPU executes the instructions of a program."
+"Which data structure follows the LIFO principle?","Queue","Stack","Linked List","Tree",B,COMPS|CSE,2,4,2,"A stack removes elements in Last-In First-Out order."
+"In deep learning, what activation function outputs probabilities summing to 1?","ReLU","Sigmoid","Softmax","Tanh",C,AIDS,4,4,3,"Softmax normalizes real-valued scores into a probability distribution."

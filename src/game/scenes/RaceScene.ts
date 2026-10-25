@@ -10,6 +10,7 @@ import { stateMachine, type GameState } from '../stateMachine';
 import { Storage } from '../../util/storage';
 import { PALETTE, DEFAULT_CONFIG } from '../../config/constants';
 import { activeApi } from '../../api';
+import { speedMult, stageFor, DEFAULT_TRACK_STAGES } from '../../shared/difficulty';
 
 export class RaceScene extends Phaser.Scene {
   public track!: Track;
@@ -17,6 +18,7 @@ export class RaceScene extends Phaser.Scene {
   public fuelSystem!: FuelSystem;
   public lapManager!: LapManager;
   public inputManager!: InputManager;
+  public currentStage = 1;
 
   private carSprite: Phaser.GameObjects.Sprite | null = null;
   private trackImage: Phaser.GameObjects.Image | null = null;
@@ -32,20 +34,30 @@ export class RaceScene extends Phaser.Scene {
   private droppedFrameCount = 0;
   private lastPerfReportTime = 0;
 
+  private isDebugLayout = false;
+  private debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  private debugText: Phaser.GameObjects.Text | null = null;
+
   constructor() {
     super('RaceScene');
   }
 
   public create(): void {
-    // 1. Initialize Racetrack
-    this.track = new Track();
+    this.isDebugLayout = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debugLayout') === '1';
+    if (this.isDebugLayout) {
+      this.debugGraphics = this.add.graphics().setDepth(9999).setScrollFactor(0);
+    }
+
+    // 1. Initialize Racetrack (Stage 1 Rookie)
+    this.currentStage = 1;
+    this.track = new Track(1);
 
     // 2. Render Track to Texture once for maximum 60FPS performance
-    if (!this.textures.exists('racetrack_surface')) {
+    if (!this.textures.exists('racetrack_surface_1')) {
       const trackCanvas = this.track.renderToCanvas();
-      this.textures.addCanvas('racetrack_surface', trackCanvas);
+      this.textures.addCanvas('racetrack_surface_1', trackCanvas);
     }
-    this.trackImage = this.add.image(0, 0, 'racetrack_surface').setOrigin(0, 0);
+    this.trackImage = this.add.image(0, 0, 'racetrack_surface_1').setOrigin(0, 0);
 
     // 3. Initialize Car at Start / Finish Line
     this.car = new Car(
@@ -71,6 +83,14 @@ export class RaceScene extends Phaser.Scene {
         console.log(
           `[Lap] Lap ${ev.lapNumber} complete! Driving time: ${(ev.drivingTimeMs / 1000).toFixed(2)}s, Total time: ${(ev.totalTimeMs / 1000).toFixed(2)}s`
         );
+
+        // Check if next lap enters a new track stage
+        const nextLap = ev.lapNumber + 1;
+        const targetStage = stageFor(nextLap, DEFAULT_TRACK_STAGES, true);
+        if (targetStage !== this.currentStage) {
+          this.swapTrackStage(targetStage);
+        }
+
         try {
           const res = await activeApi.submitLap(ev.lapNumber, ev.drivingTimeMs);
           if (res.accepted) {
@@ -123,6 +143,33 @@ export class RaceScene extends Phaser.Scene {
     this.isRaceActive = stateMachine.getState() === 'RACING';
   }
 
+  public swapTrackStage(nextStage: number): void {
+    if (nextStage === this.currentStage) return;
+    console.log(`[Track] Swapping track from Stage ${this.currentStage} to Stage ${nextStage}`);
+
+    const textureKey = `racetrack_surface_${nextStage}`;
+    if (!this.textures.exists(textureKey)) {
+      const nextTrack = new Track(nextStage);
+      const trackCanvas = nextTrack.renderToCanvas();
+      this.textures.addCanvas(textureKey, trackCanvas);
+    }
+
+    this.currentStage = nextStage;
+    this.track = new Track(nextStage);
+    if (this.trackImage) {
+      this.trackImage.setTexture(textureKey);
+    }
+
+    // 150ms camera flash effect
+    this.cameras.main.flash(150, 255, 255, 255);
+
+    // Toast banner
+    const showToast = (window as any).__showHudToast;
+    if (showToast) {
+      showToast(`🏁 STAGE ${nextStage} · NEW TRACK!`);
+    }
+  }
+
   public updateCarTexture(playerId: string): void {
     const idx = this.getCarColorIndex(playerId);
     if (this.carSprite && this.textures.exists(`car_${idx}`)) {
@@ -164,9 +211,11 @@ export class RaceScene extends Phaser.Scene {
     const steerInput = this.inputManager.getSteerInput();
     const hasFuel = !this.fuelSystem.isEmpty();
 
-    // In RACING state: update car arcade physics and fuel drain
+    // In RACING state: update car arcade physics with speed ramp and fuel drain
     if (this.isRaceActive) {
-      this.car.update(dt, steerInput, hasFuel, this.track);
+      const curLap = this.lapManager.getLapCount();
+      const speedMultiplier = speedMult(curLap + 1, 0.04, 1.5, true);
+      this.car.update(dt, steerInput, hasFuel, this.track, speedMultiplier);
       this.fuelSystem.update(deltaMs, this.car.speed);
 
       // Reused coordinate vectors (0 heap allocations)
@@ -195,8 +244,8 @@ export class RaceScene extends Phaser.Scene {
       this.carSprite.setRotation(this.car.heading + Math.PI / 2);
     }
 
-    // Camera follow with lookahead
-    const lookAheadDist = 55;
+    // Camera follow with direction-aligned lookahead capped to ~5% height
+    const lookAheadDist = Math.min(28, this.cameras.main.height * 0.05);
     const targetX = this.car.x + Math.cos(this.car.heading) * lookAheadDist;
     const targetY = this.car.y + Math.sin(this.car.heading) * lookAheadDist;
 
@@ -205,6 +254,66 @@ export class RaceScene extends Phaser.Scene {
 
     this.cameras.main.scrollX = Phaser.Math.Linear(this.cameras.main.scrollX, destScrollX, 0.1);
     this.cameras.main.scrollY = Phaser.Math.Linear(this.cameras.main.scrollY, destScrollY, 0.1);
+
+    if (this.isDebugLayout) {
+      this.renderDebugLayout();
+    }
+  }
+
+  public onLogicalResize(width: number, height: number): void {
+    if (this.cameras && this.cameras.main) {
+      this.cameras.main.setSize(width, height);
+      this.cameras.main.setZoom(1.0);
+    }
+  }
+
+  private renderDebugLayout(): void {
+    if (!this.debugGraphics) return;
+    this.debugGraphics.clear();
+
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+
+    // 1. Center Crosshairs (Cyan)
+    this.debugGraphics.lineStyle(1, 0x00e5ff, 0.7);
+    this.debugGraphics.beginPath();
+    this.debugGraphics.moveTo(0, h / 2);
+    this.debugGraphics.lineTo(w, h / 2);
+    this.debugGraphics.moveTo(w / 2, 0);
+    this.debugGraphics.lineTo(w / 2, h);
+    this.debugGraphics.strokePath();
+
+    // 2. 45% - 55% Safe Zone (Green)
+    this.debugGraphics.lineStyle(1, 0x39ff14, 0.6);
+    this.debugGraphics.strokeRect(0, h * 0.45, w, h * 0.10);
+    this.debugGraphics.fillStyle(0x39ff14, 0.08);
+    this.debugGraphics.fillRect(0, h * 0.45, w, h * 0.10);
+
+    // 3. HUD top area & control bottom area (Yellow outlines)
+    this.debugGraphics.lineStyle(1, 0xffd400, 0.5);
+    this.debugGraphics.strokeRect(2, 2, w - 4, 60);
+    this.debugGraphics.strokeRect(2, h - 100, w - 4, 98);
+
+    // 4. Car screen position fraction
+    const carScreenY = this.car.y - this.cameras.main.scrollY;
+    const carFrac = (carScreenY / h) * 100;
+    const inSafe = carFrac >= 45 && carFrac <= 55;
+
+    if (!this.debugText) {
+      this.debugText = this.add.text(8, 70, '', {
+        fontSize: '8px',
+        fontFamily: 'monospace',
+        backgroundColor: '#000000dd',
+        padding: { x: 4, y: 3 },
+      }).setScrollFactor(0).setDepth(10000);
+    }
+
+    this.debugText.setText(
+      `VIEWPORT: ${window.innerWidth}x${window.innerHeight}\n` +
+      `DPR: ${(window.devicePixelRatio || 1).toFixed(1)} | CANVAS: ${w}x${h}\n` +
+      `CAR Y: ${carFrac.toFixed(1)}% [${inSafe ? 'CENTERED 45-55%' : 'OFFSET'}]`
+    );
+    this.debugText.setColor(inSafe ? '#39ff14' : '#ff2e4d');
   }
 
   public getPerformanceStats(): {
