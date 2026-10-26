@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Track, ROAD_HALF_WIDTH, WORLD_WIDTH, WORLD_HEIGHT } from '../track';
+import { Track, WORLD_WIDTH, WORLD_HEIGHT } from '../track';
 import { generateTrack } from '../tracks/generator';
 import { Car } from '../car';
 import { FuelSystem } from '../fuel';
