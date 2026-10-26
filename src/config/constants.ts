@@ -22,9 +22,9 @@ export const PALETTE = {
 } as const;
 
 export const DEFAULT_CONFIG = {
-  tankMaxMs: 10000,
-  initialFuelMs: 10000,
-  fuelPerCorrectMs: 10000,
+  tankMaxMs: 15000,
+  initialFuelMs: 15000,
+  fuelPerCorrectMs: 15000,
   questionTimeMs: 15000,
   wrongLockoutMs: 3000,
   minLapMs: 36000,
